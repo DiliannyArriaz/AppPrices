@@ -1,0 +1,3 @@
+C:\Users\Dilianny\Documents\OfertasA2\PriceTrackerApp\bin\Release\net8.0-android\android-arm64\publish\com.companyname.pricetrackerapp-Signed.apk
+C:\Users\Dilianny\Documents\OfertasA2\PriceTrackerApp\bin\Release\net8.0-android\android-arm64\publish\com.companyname.pricetrackerapp.apk
+C:\Users\Dilianny\Documents\OfertasA2\PriceTrackerApp\bin\Release\net8.0-android\android-arm64\publish\_Microsoft.Android.Resource.Designer.dll

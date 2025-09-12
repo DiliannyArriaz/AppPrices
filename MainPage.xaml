@@ -1,0 +1,172 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:local="clr-namespace:PriceTrackerApp"
+             x:Class="PriceTrackerApp.MainPage"
+             x:Name="MainPageRef"
+             Title="Buscador de Ofertas">
+    
+    <ContentPage.Resources>
+        <ResourceDictionary>
+            <local:InvertedBoolConverter x:Key="InvertedBoolConverter" />
+        </ResourceDictionary>
+    </ContentPage.Resources>
+
+    <ScrollView>
+        <VerticalStackLayout
+            Padding="20"
+            Spacing="20">
+            
+            <!-- Header -->
+            <Label
+                Text="🛒 Buscador de Ofertas"
+                FontSize="28"
+                FontAttributes="Bold"
+                HorizontalOptions="Center"
+                TextColor="#2E7D32" />
+
+            <Label
+                Text="Encuentra las mejores ofertas en Día Online, Carrefour y Jumbo"
+                FontSize="16"
+                HorizontalOptions="Center"
+                TextColor="#666"
+                HorizontalTextAlignment="Center" />
+
+            <!-- Search Section -->
+            <Frame BackgroundColor="#F5F5F5" Padding="15" CornerRadius="10">
+                <VerticalStackLayout Spacing="15">
+                    <Label Text="¿Qué producto buscas?" FontSize="18" FontAttributes="Bold" />
+                    
+                    <Entry x:Name="SearchEntry"
+                           Placeholder="Ej: leche, pan, arroz..."
+                           FontSize="16"
+                           BackgroundColor="White" />
+                    
+                    <Button x:Name="SearchButton"
+                            Text="🔍 Buscar Ofertas"
+                            BackgroundColor="#4CAF50"
+                            TextColor="White"
+                            FontSize="16"
+                            FontAttributes="Bold"
+                            Clicked="OnSearchClicked"
+                            HorizontalOptions="Fill" />
+                </VerticalStackLayout>
+            </Frame>
+
+            <!-- Store Selection -->
+            <Frame BackgroundColor="#E3F2FD" Padding="15" CornerRadius="10">
+                <VerticalStackLayout Spacing="10">
+                    <Label Text="Selecciona las tiendas:" FontSize="16" FontAttributes="Bold" />
+                    
+                    <CheckBox x:Name="DiaOnlineCheck" IsChecked="True" />
+                    <Label Text="Día Online" VerticalOptions="Center" />
+                    
+                    <CheckBox x:Name="CarrefourCheck" IsChecked="True" />
+                    <Label Text="Carrefour" VerticalOptions="Center" />
+                    
+                    <CheckBox x:Name="JumboCheck" IsChecked="True" />
+                    <Label Text="Jumbo" VerticalOptions="Center" />
+                </VerticalStackLayout>
+            </Frame>
+
+            <!-- Loading Indicator -->
+            <ActivityIndicator x:Name="LoadingIndicator" 
+                             IsVisible="False" 
+                             IsRunning="False" 
+                             Color="#4CAF50" />
+            
+            <Label x:Name="LoadingLabel" 
+                   Text="Buscando ofertas..."
+                   IsVisible="False"
+                   HorizontalOptions="Center"
+                   FontSize="14"
+                   TextColor="#666" />
+
+            <!-- Results Section -->
+            <CollectionView x:Name="ResultsCollectionView" IsVisible="False">
+                <CollectionView.ItemTemplate>
+                    <DataTemplate>
+                        <Grid Padding="10" BackgroundColor="White" Margin="5">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            
+                            <Label Grid.Row="0" 
+                                   Text="{Binding ProductName}" 
+                                   FontSize="16" 
+                                   FontAttributes="Bold" 
+                                   TextColor="Black" />
+                            
+                            <StackLayout Grid.Row="1" Orientation="Vertical" Spacing="5">
+                                <Label Text="{Binding Store}" 
+                                       FontSize="14" 
+                                       TextColor="Gray" />
+                                
+                                <!-- Precio con descuento -->
+                                <StackLayout Orientation="Horizontal" Spacing="5" IsVisible="{Binding HasDiscount}">
+                                    <Label Text="{Binding OriginalPriceText}" 
+                                           FontSize="14" 
+                                           TextColor="Gray"
+                                           TextDecorations="Strikethrough" />
+                                    <Label Text="AHORA" 
+                                           FontSize="12" 
+                                           TextColor="Red"
+                                           FontAttributes="Bold" />
+                                    <Label Text="{Binding Price}" 
+                                           FontSize="16" 
+                                           FontAttributes="Bold" 
+                                           TextColor="Green" />
+                                    <Frame BackgroundColor="Green" 
+                                           Padding="3,1" 
+                                           CornerRadius="3"
+                                           HasShadow="False">
+                                        <Label Text="{Binding DiscountPercentage, StringFormat='{0}% OFF'}" 
+                                               FontSize="10" 
+                                               TextColor="White"
+                                               FontAttributes="Bold" />
+                                    </Frame>
+                                </StackLayout>
+                                
+                                <!-- Precio sin descuento -->
+                                <Label Text="{Binding Price}" 
+                                       FontSize="16" 
+                                       FontAttributes="Bold" 
+                                       TextColor="Green"
+                                       IsVisible="{Binding HasDiscount, Converter={StaticResource InvertedBoolConverter}}" />
+                                
+                                <!-- Promoción especial -->
+                                <Frame BackgroundColor="Green" 
+                                       Padding="5,2" 
+                                       CornerRadius="5"
+                                       HasShadow="False"
+                                       IsVisible="{Binding HasSpecialPromotion}"
+                                       Margin="0,5,0,0">
+                                    <Label Text="{Binding PromotionText}" 
+                                           FontSize="12" 
+                                           TextColor="White"
+                                           FontAttributes="Bold" 
+                                           HorizontalOptions="Center" />
+                                </Frame>
+                            </StackLayout>
+                            
+                            <StackLayout Grid.Row="2" Orientation="Horizontal" Spacing="10" Margin="0,5,0,0">
+                                <Button Text="Ver Producto" 
+                                        BackgroundColor="#007ACC"
+                                        TextColor="White"
+                                        FontSize="12"
+                                        HeightRequest="35"
+                                        CornerRadius="5"
+                                        Clicked="OnOpenProductClicked"
+                                        CommandParameter="{Binding .}" />
+                            </StackLayout>
+                        </Grid>
+                    </DataTemplate>
+                </CollectionView.ItemTemplate>
+            </CollectionView>
+
+        </VerticalStackLayout>
+    </ScrollView>
+
+</ContentPage>

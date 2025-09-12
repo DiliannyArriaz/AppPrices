@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="ProjectModuleManager">
+    <modules>
+      <module fileurl="file://$PROJECT_DIR$/.idea/PriceTrackerApp.iml" filepath="$PROJECT_DIR$/.idea/PriceTrackerApp.iml" />
+      <module fileurl="file://$PROJECT_DIR$/obj/Debug/net8.0-android/net8.0-android.iml" filepath="$PROJECT_DIR$/obj/Debug/net8.0-android/net8.0-android.iml" />
+      <module fileurl="file://$PROJECT_DIR$/obj/Debug/net9.0-android/net9.0-android.iml" filepath="$PROJECT_DIR$/obj/Debug/net9.0-android/net9.0-android.iml" />
+    </modules>
+  </component>
+</project>
