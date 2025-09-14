@@ -32,45 +32,60 @@ namespace PriceTrackerApp.Services
                 Console.WriteLine($"🚀 INICIANDO BÚSQUEDA: {searchTerm}");
                 Console.WriteLine($"📋 Tiendas seleccionadas - DiaOnline: {searchDiaOnline}, Carrefour: {searchCarrefour}, Jumbo: {searchJumbo}");
                 
+                // Determinar si es una búsqueda de marca (búsqueda corta, sin espacios, mayúsculas, etc.)
+                bool isBrandSearch = searchTerm.Length >= 3 && 
+                                   searchTerm.Length <= 15 && 
+                                   !searchTerm.Contains(" ") && 
+                                   searchTerm.Any(char.IsUpper);
+                
                 var tasks = new List<Task<List<ProductOffer>>>();
                 
                 if (searchDiaOnline)
-                    tasks.Add(SearchDiaOnlineRealAsync(searchTerm));
+                    tasks.Add(SearchDiaOnlineAsync(searchTerm));
                 
                 if (searchCarrefour)
-                    tasks.Add(SearchCarrefourRealAsync(searchTerm));
+                    tasks.Add(SearchCarrefourAsync(searchTerm));
                 
                 if (searchJumbo)
-                    tasks.Add(SearchJumboRealAsync(searchTerm));
+                    tasks.Add(SearchJumboAsync(searchTerm));
                 
                 var allResults = await Task.WhenAll(tasks);
                 
+                // Procesar resultados manteniendo productos relevantes
                 foreach (var storeResults in allResults)
                 {
-                    results.AddRange(storeResults);
+                    foreach (var product in storeResults)
+                    {
+                        // Para búsquedas de marca, mantener productos aunque no tengan precio
+                        if (isBrandSearch)
+                        {
+                            // Si el producto contiene el término de búsqueda (marca), mantenerlo
+                            if (product.ProductName != null && 
+                                product.ProductName.IndexOf(searchTerm, StringComparison.OrdinalIgnoreCase) >= 0)
+                            {
+                                results.Add(product);
+                            }
+                        }
+                        // Para búsquedas normales, mantener solo productos con precio
+                        else if (product.PriceValue > 0 || 
+                                (product.Price != null && product.Price.Contains("$")))
+                        {
+                            results.Add(product);
+                        }
+                    }
                 }
                 
                 Console.WriteLine($"📊 Productos encontrados en APIs reales: {results.Count}");
                 
-                // Si no hay resultados de las APIs reales, usar productos demo
-                if (results.Count == 0)
-                {
-                    Console.WriteLine("⚠️ No se encontraron productos reales, usando productos demo...");
-                    
-                    if (searchDiaOnline)
-                        results.AddRange(GetDemoProductsDiaOnline(searchTerm));
-                    
-                    if (searchCarrefour)
-                        results.AddRange(GetDemoProductsCarrefour(searchTerm));
-                    
-                    if (searchJumbo)
-                        results.AddRange(GetDemoProductsJumbo(searchTerm));
-                        
-                    Console.WriteLine($"📦 Productos demo agregados: {results.Count}");
-                }
+                // Ordenar resultados: primero por coincidencia exacta con el término de búsqueda, luego por precio
+                var orderedResults = results
+                    .OrderByDescending(p => p.ProductName != null && 
+                                          p.ProductName.IndexOf(searchTerm, StringComparison.OrdinalIgnoreCase) >= 0)
+                    .ThenBy(p => p.PriceValue)
+                    .ToList();
                 
-                Console.WriteLine($"✅ BÚSQUEDA COMPLETADA - Total productos: {results.Count}");
-                return results.OrderBy(r => r.PriceValue).ToList();
+                Console.WriteLine($"✅ BÚSQUEDA COMPLETADA - Total productos: {orderedResults.Count}");
+                return orderedResults;
             }
             catch (Exception ex)
             {
@@ -79,917 +94,165 @@ namespace PriceTrackerApp.Services
             }
         }
 
-        private List<ProductOffer> GetDemoProductsDiaOnline(string searchTerm)
-        {
-            var products = new Dictionary<string, List<ProductOffer>>
-            {
-                ["atun"] = new List<ProductOffer>
-                {
-                    new ProductOffer { ProductName = "Atún Gomes da Costa en Aceite x 170g", Store = "Día Online", Price = "$890", PriceValue = 890 },
-                    new ProductOffer { ProductName = "Atún La Campagnola al Natural x 170g", Store = "Día Online", Price = "$750", PriceValue = 750 },
-                    new ProductOffer { ProductName = "Atún Calvo en Aceite x 160g", Store = "Día Online", Price = "$1.200", PriceValue = 1200 }
-                },
-                ["morixe"] = new List<ProductOffer>
-                {
-                    new ProductOffer { ProductName = "Harina Morixe 000 x 1kg", Store = "Día Online", Price = "$680", PriceValue = 680 },
-                    new ProductOffer { ProductName = "Harina Morixe Leudante x 1kg", Store = "Día Online", Price = "$720", PriceValue = 720 },
-                    new ProductOffer { ProductName = "Premezcla Morixe para Tortas x 500g", Store = "Día Online", Price = "$1.150", PriceValue = 1150 },
-                    new ProductOffer { ProductName = "Avena Instantánea Morixe 400g", Store = "Día Online", Price = "$1.460", PriceValue = 1460, OriginalPrice = 1590, OriginalPriceText = "$1.590", DiscountPercentage = 8, HasDiscount = true, DiscountText = "8% OFF" },
-                    new ProductOffer { ProductName = "Harina Morixe Integral x 1kg", Store = "Día Online", Price = "$750", PriceValue = 750 },
-                    new ProductOffer { ProductName = "Premezcla Morixe Brownie x 480g", Store = "Día Online", Price = "$1.280", PriceValue = 1280 },
-                    new ProductOffer { ProductName = "Harina Morixe 0000 x 1kg", Store = "Día Online", Price = "$695", PriceValue = 695 }
-                },
-                ["leche"] = new List<ProductOffer>
-                {
-                    new ProductOffer { ProductName = "Leche La Serenísima Entera x 1L", Store = "Día Online", Price = "$850", PriceValue = 850 },
-                    new ProductOffer { ProductName = "Leche Sancor Descremada x 1L", Store = "Día Online", Price = "$820", PriceValue = 820 }
-                },
-                ["pan"] = new List<ProductOffer>
-                {
-                    new ProductOffer { ProductName = "Pan Lactal Bimbo x 450g", Store = "Día Online", Price = "$950", PriceValue = 950 },
-                    new ProductOffer { ProductName = "Pan Integral Fargo x 400g", Store = "Día Online", Price = "$1.100", PriceValue = 1100 }
-                },
-                ["arroz"] = new List<ProductOffer>
-                {
-                    new ProductOffer { ProductName = "Arroz Gallo Oro x 1kg", Store = "Día Online", Price = "$1.200", PriceValue = 1200 },
-                    new ProductOffer { ProductName = "Arroz Marolio x 1kg", Store = "Día Online", Price = "$980", PriceValue = 980 }
-                }
-            };
-
-            var searchKey = searchTerm.ToLower().Trim();
-            
-            // Buscar coincidencias exactas primero
-            if (products.ContainsKey(searchKey))
-                return products[searchKey];
-            
-            // Buscar coincidencias parciales
-            var partialMatches = new List<ProductOffer>();
-            foreach (var category in products)
-            {
-                if (category.Key.Contains(searchKey) || searchKey.Contains(category.Key))
-                {
-                    partialMatches.AddRange(category.Value);
-                }
-            }
-            
-            if (partialMatches.Any())
-                return partialMatches;
-
-            // Si no hay coincidencias, crear productos genéricos
-            return new List<ProductOffer>
-            {
-                new ProductOffer 
-                { 
-                    ProductName = $"{searchTerm} - Marca Premium", 
-                    Store = "Día Online", 
-                    Price = "$1.250", 
-                    PriceValue = 1250 
-                },
-                new ProductOffer 
-                { 
-                    ProductName = $"{searchTerm} - Marca Económica", 
-                    Store = "Día Online", 
-                    Price = "$890", 
-                    PriceValue = 890 
-                }
-            };
-        }
-
-        private List<ProductOffer> GetDemoProductsCarrefour(string searchTerm)
-        {
-            var products = new Dictionary<string, List<ProductOffer>>
-            {
-                ["atun"] = new List<ProductOffer>
-                {
-                    new ProductOffer { ProductName = "Atún Gomes da Costa en Aceite x 170g", Store = "Carrefour", Price = "$920", PriceValue = 920 },
-                    new ProductOffer { ProductName = "Atún La Campagnola al Natural x 170g", Store = "Carrefour", Price = "$780", PriceValue = 780 },
-                    new ProductOffer { ProductName = "Atún Carrefour en Aceite x 160g", Store = "Carrefour", Price = "$650", PriceValue = 650 }
-                },
-                ["morixe"] = new List<ProductOffer>
-                {
-                    new ProductOffer { ProductName = "Harina Morixe 000 x 1kg", Store = "Carrefour", Price = "$695", PriceValue = 695 },
-                    new ProductOffer { ProductName = "Harina Morixe Leudante x 1kg", Store = "Carrefour", Price = "$740", PriceValue = 740 },
-                    new ProductOffer { ProductName = "Premezcla Morixe para Budín x 480g", Store = "Carrefour", Price = "$1.080", PriceValue = 1080 },
-                    new ProductOffer { ProductName = "Avena Instantánea Morixe 400g", Store = "Carrefour", Price = "$1.480", PriceValue = 1480, OriginalPrice = 1620, OriginalPriceText = "$1.620", DiscountPercentage = 9, HasDiscount = true, DiscountText = "9% OFF" },
-                    new ProductOffer { ProductName = "Harina Morixe Integral x 1kg", Store = "Carrefour", Price = "$780", PriceValue = 780 },
-                    new ProductOffer { ProductName = "Premezcla Morixe Vainilla x 500g", Store = "Carrefour", Price = "$1.150", PriceValue = 1150 }
-                },
-                ["leche"] = new List<ProductOffer>
-                {
-                    new ProductOffer { ProductName = "Leche La Serenísima Entera x 1L", Store = "Carrefour", Price = "$870", PriceValue = 870 },
-                    new ProductOffer { ProductName = "Leche Carrefour Descremada x 1L", Store = "Carrefour", Price = "$750", PriceValue = 750 }
-                },
-                ["pan"] = new List<ProductOffer>
-                {
-                    new ProductOffer { ProductName = "Pan Lactal Bimbo x 450g", Store = "Carrefour", Price = "$980", PriceValue = 980 },
-                    new ProductOffer { ProductName = "Pan Integral Carrefour x 400g", Store = "Carrefour", Price = "$850", PriceValue = 850 }
-                },
-                ["arroz"] = new List<ProductOffer>
-                {
-                    new ProductOffer { ProductName = "Arroz Gallo Oro x 1kg", Store = "Carrefour", Price = "$1.180", PriceValue = 1180 },
-                    new ProductOffer { ProductName = "Arroz Carrefour x 1kg", Store = "Carrefour", Price = "$890", PriceValue = 890 }
-                }
-            };
-
-            var searchKey = searchTerm.ToLower().Trim();
-            
-            if (products.ContainsKey(searchKey))
-                return products[searchKey];
-            
-            var partialMatches = new List<ProductOffer>();
-            foreach (var category in products)
-            {
-                if (category.Key.Contains(searchKey) || searchKey.Contains(category.Key))
-                {
-                    partialMatches.AddRange(category.Value);
-                }
-            }
-            
-            if (partialMatches.Any())
-                return partialMatches;
-
-            return new List<ProductOffer>
-            {
-                new ProductOffer 
-                { 
-                    ProductName = $"{searchTerm} - Marca Premium", 
-                    Store = "Carrefour", 
-                    Price = "$1.180", 
-                    PriceValue = 1180 
-                },
-                new ProductOffer 
-                { 
-                    ProductName = $"{searchTerm} - Marca Carrefour", 
-                    Store = "Carrefour", 
-                    Price = "$820", 
-                    PriceValue = 820 
-                }
-            };
-        }
-
-        private List<ProductOffer> GetDemoProductsJumbo(string searchTerm)
-        {
-            var products = new Dictionary<string, List<ProductOffer>>
-            {
-                ["atun"] = new List<ProductOffer>
-                {
-                    new ProductOffer { ProductName = "Atún Gomes da Costa en Aceite x 170g", Store = "Jumbo", Price = "$950", PriceValue = 950 },
-                    new ProductOffer { ProductName = "Atún La Campagnola al Natural x 170g", Store = "Jumbo", Price = "$790", PriceValue = 790 },
-                    new ProductOffer { ProductName = "Atún Jumbo en Aceite x 160g", Store = "Jumbo", Price = "$680", PriceValue = 680 }
-                },
-                ["morixe"] = new List<ProductOffer>
-                {
-                    new ProductOffer { ProductName = "Harina Morixe 000 x 1kg", Store = "Jumbo", Price = "$710", PriceValue = 710 },
-                    new ProductOffer { ProductName = "Harina Morixe Leudante x 1kg", Store = "Jumbo", Price = "$750", PriceValue = 750 },
-                    new ProductOffer { ProductName = "Premezcla Morixe Vainilla x 500g", Store = "Jumbo", Price = "$1.200", PriceValue = 1200 },
-                    new ProductOffer { ProductName = "Avena Instantánea Morixe 400g", Store = "Jumbo", Price = "$1.520", PriceValue = 1520, OriginalPrice = 1650, OriginalPriceText = "$1.650", DiscountPercentage = 8, HasDiscount = true, DiscountText = "8% OFF" },
-                    new ProductOffer { ProductName = "Harina Morixe Integral x 1kg", Store = "Jumbo", Price = "$790", PriceValue = 790 },
-                    new ProductOffer { ProductName = "Premezcla Morixe Chocolate x 480g", Store = "Jumbo", Price = "$1.320", PriceValue = 1320 }
-                },
-                ["leche"] = new List<ProductOffer>
-                {
-                    new ProductOffer { ProductName = "Leche La Serenísima Entera x 1L", Store = "Jumbo", Price = "$880", PriceValue = 880 },
-                    new ProductOffer { ProductName = "Leche Sancor Descremada x 1L", Store = "Jumbo", Price = "$840", PriceValue = 840 }
-                },
-                ["pan"] = new List<ProductOffer>
-                {
-                    new ProductOffer { ProductName = "Pan Lactal Bimbo x 450g", Store = "Jumbo", Price = "$970", PriceValue = 970 },
-                    new ProductOffer { ProductName = "Pan Integral Jumbo x 400g", Store = "Jumbo", Price = "$890", PriceValue = 890 }
-                },
-                ["arroz"] = new List<ProductOffer>
-                {
-                    new ProductOffer { ProductName = "Arroz Gallo Oro x 1kg", Store = "Jumbo", Price = "$1.220", PriceValue = 1220 },
-                    new ProductOffer { ProductName = "Arroz Marolio x 1kg", Store = "Jumbo", Price = "$1.050", PriceValue = 1050 }
-                }
-            };
-
-            var searchKey = searchTerm.ToLower().Trim();
-            
-            if (products.ContainsKey(searchKey))
-                return products[searchKey];
-            
-            var partialMatches = new List<ProductOffer>();
-            foreach (var category in products)
-            {
-                if (category.Key.Contains(searchKey) || searchKey.Contains(category.Key))
-                {
-                    partialMatches.AddRange(category.Value);
-                }
-            }
-            
-            if (partialMatches.Any())
-                return partialMatches;
-
-            return new List<ProductOffer>
-            {
-                new ProductOffer 
-                { 
-                    ProductName = $"{searchTerm} - Marca Premium", 
-                    Store = "Jumbo", 
-                    Price = "$1.320", 
-                    PriceValue = 1320 
-                },
-                new ProductOffer 
-                { 
-                    ProductName = $"{searchTerm} - Marca Jumbo", 
-                    Store = "Jumbo", 
-                    Price = "$950", 
-                    PriceValue = 950 
-                }
-            };
-        }
-
-        private async Task<List<ProductOffer>> SearchDiaOnlineRealAsync(string searchTerm)
+        private async Task<List<ProductOffer>> SearchJumboRealAsync(string searchTerm)
         {
             var results = new List<ProductOffer>();
             var debugInfo = new List<string>();
+            var isBrandSearch = searchTerm.Length >= 3 && !searchTerm.Contains(" ") && searchTerm.Any(char.IsUpper);
             
             try
             {
-                debugInfo.Add($"🔍 Buscando en Día Online: {searchTerm}");
+                debugInfo.Add($"🔍 Buscando en Jumbo: {searchTerm}");
                 
-                // Método 1: Intentar con la API
-                var apiResults = await SearchDiaOnlineAPIAsync(searchTerm, debugInfo);
-                results.AddRange(apiResults);
+                // Obtener resultados de Jumbo
+                var jumboResults = await SearchJumboAsync(searchTerm);
                 
-                // Método 2: Si la API devuelve pocos resultados relevantes, usar scraping directo
-                var relevantResults = results.Where(r => ContainsSearchTerm(r.ProductName, searchTerm)).ToList();
-                debugInfo.Add($"📊 API devolvió {results.Count} productos, {relevantResults.Count} relevantes");
-                
-                if (relevantResults.Count <= 1)
+                // Filtrar resultados basado en si es una búsqueda de marca o no
+                foreach (var product in jumboResults)
                 {
-                    debugInfo.Add("🌐 Pocos resultados relevantes de API, intentando scraping directo...");
-                    var scrapingResults = await SearchDiaOnlineDirectAsync(searchTerm, debugInfo);
-                    results.AddRange(scrapingResults);
-                }
-            }
-            catch (Exception ex)
-            {
-                debugInfo.Add($"❌ Error en Día Online: {ex.Message}");
-            }
-            
-            // Guardar info de debug para mostrar en la UI
-            _lastDebugInfo = string.Join("\n", debugInfo);
-            
-            return results;
-        }
-
-        private async Task<List<ProductOffer>> SearchDiaOnlineAPIAsync(string searchTerm, List<string> debugInfo)
-        {
-            var results = new List<ProductOffer>();
-            
-            try
-            {
-                // Log the search URL
-                var searchUrl = $"https://diaonline.supermercadosdia.com.ar/api/catalog_system/pub/products/search?q={Uri.EscapeDataString(searchTerm)}&_from=0&_to=20";
-                debugInfo.Add($"🔍 Búsqueda en Día Online API: {searchUrl}");
-                
-                // Configurar headers adicionales para evitar detección de bot
-                var request = new HttpRequestMessage(HttpMethod.Get, searchUrl);
-                
-                request.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
-                request.Headers.Add("Accept", "application/json");
-                request.Headers.Add("Accept-Language", "es-AR,es;q=0.9");
-                request.Headers.Add("Referer", "https://diaonline.supermercadosdia.com.ar/");
-                request.Headers.Add("Origin", "https://diaonline.supermercadosdia.com.ar");
-                
-                // Log request details
-                var requestHeaders = string.Join("\n", request.Headers
-                    .Select(h => $"  {h.Key}: {string.Join(", ", h.Value)}"));
-                debugInfo.Add($"📤 Request Headers:\n{requestHeaders}");
-                debugInfo.Add($"🌐 Request URL: {request.RequestUri}");
-                
-                // Send the request
-                using (var response = await _httpClient.SendAsync(request))
-                {
-                    var responseContent = await response.Content.ReadAsStringAsync();
-                    
-                    // Log response details
-                    var responseHeaders = string.Join("\n", response.Headers
-                        .Select(h => $"  {h.Key}: {string.Join(", ", h.Value)}"));
-                    debugInfo.Add($"📥 Response Status: {(int)response.StatusCode} {response.ReasonPhrase}");
-                    debugInfo.Add($"📥 Response Headers:\n{responseHeaders}");
-                    
-                    // Save response for debugging
-                    var tempPath = Path.Combine(FileSystem.CacheDirectory, "dia_response.json");
-                    await File.WriteAllTextAsync(tempPath, responseContent);
-                    debugInfo.Add($"📄 Response saved to: {tempPath}");
-                    
-                    if (!response.IsSuccessStatusCode)
+                    if (isBrandSearch)
                     {
-                        debugInfo.Add($"❌ Error en la respuesta: {response.StatusCode} - {response.ReasonPhrase}");
-                        debugInfo.Add($"📄 Contenido de la respuesta (first 1000 chars):\n{(responseContent.Length > 1000 ? responseContent.Substring(0, 1000) : responseContent)}");
-                        return results;
-                    }
-                    
-                    // Log first 500 characters of response for quick inspection
-                    debugInfo.Add($"📄 Response preview (first 500 chars):\n{(responseContent.Length > 500 ? responseContent.Substring(0, 500) + "..." : responseContent)}");
-                    
-                    // Try to deserialize the JSON response
-                    try
-                    {
-                        debugInfo.Add("🔍 Intentando deserializar la respuesta JSON...");
-                        using (JsonDocument doc = JsonDocument.Parse(responseContent))
+                        // Para búsquedas de marca, mantener productos aunque no tengan precio
+                        if (product.ProductName != null && 
+                            product.ProductName.IndexOf(searchTerm, StringComparison.OrdinalIgnoreCase) >= 0)
                         {
-                            var root = doc.RootElement;
-                            debugInfo.Add($"✅ JSON deserializado. Tipo: {root.ValueKind}");
-                            
-                            if (root.ValueKind != JsonValueKind.Array)
-                            {
-                                debugInfo.Add($"❌ Se esperaba un array JSON pero se recibió: {root.ValueKind}");
-                                return results;
-                            }
-                            
-                            debugInfo.Add($"📦 Total de productos en la respuesta: {root.GetArrayLength()}");
-                            
-                            foreach (var product in root.EnumerateArray())
-                            {
-                                try
-                                {
-                                    // Extract product name
-                                    string name = product.TryGetProperty("productName", out var nameProp) 
-                                        ? nameProp.GetString() ?? "[Sin nombre]" 
-                                        : "[Sin nombre]";
-                                    
-                                    // Extract price, original price, and availability
-                                    string price = null;
-                                    string originalPrice = null;
-                                    decimal discountPercentage = 0;
-                                    bool isAvailable = false;
-                                    
-                                    if (product.TryGetProperty("items", out var items) && items.ValueKind == JsonValueKind.Array && items.GetArrayLength() > 0)
-                                    {
-                                        var firstItem = items[0];
-                                        if (firstItem.TryGetProperty("sellers", out var sellers) && 
-                                            sellers.ValueKind == JsonValueKind.Array && 
-                                            sellers.GetArrayLength() > 0)
-                                        {
-                                            var firstSeller = sellers[0];
-                                            if (firstSeller.TryGetProperty("commertialOffer", out var offer))
-                                            {
-                                                // Get current price
-                                                if (offer.TryGetProperty("Price", out var priceProp) && 
-                                                    priceProp.ValueKind != JsonValueKind.Null)
-                                                {
-                                                    price = priceProp.GetDecimal().ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
-                                                }
-                                                
-                                                // Get original price (list price)
-                                                if (offer.TryGetProperty("ListPrice", out var listPriceProp) && 
-                                                    listPriceProp.ValueKind != JsonValueKind.Null)
-                                                {
-                                                    var listPriceValue = listPriceProp.GetDecimal();
-                                                    if (listPriceValue > 0)
-                                                    {
-                                                        originalPrice = listPriceValue.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
-                                                        
-                                                        // Calculate discount percentage
-                                                        if (decimal.TryParse(price, out var currentPriceValue) && currentPriceValue > 0)
-                                                        {
-                                                            discountPercentage = Math.Round(((listPriceValue - currentPriceValue) / listPriceValue) * 100, 0);
-                                                        }
-                                                    }
-                                                }
-                                                
-                                                // Check availability
-                                                if (offer.TryGetProperty("IsAvailable", out var availableProp) && 
-                                                    availableProp.ValueKind == JsonValueKind.True)
-                                                {
-                                                    isAvailable = true;
-                                                }
-                                            }
-                                        }
-                                    }
-                                    
-                                    debugInfo.Add($"🔍 Producto: {name} | Precio: {price ?? "N/A"} | Original: {originalPrice ?? "N/A"} | Desc: {discountPercentage}% | Disponible: {isAvailable}");
-                                    
-                                    if (!string.IsNullOrEmpty(name) && !string.IsNullOrEmpty(price))
-                                    {
-                                        // Only add products that match the search term
-                                        if (ContainsSearchTerm(name, searchTerm))
-                                        {
-                                            if (decimal.TryParse(price, System.Globalization.NumberStyles.Any, 
-                                                System.Globalization.CultureInfo.InvariantCulture, out decimal priceValue))
-                                            {
-                                                // Parse original price
-                                                decimal originalPriceValue = 0;
-                                                if (!string.IsNullOrEmpty(originalPrice))
-                                                {
-                                                    decimal.TryParse(originalPrice, System.Globalization.NumberStyles.Any, 
-                                                        System.Globalization.CultureInfo.InvariantCulture, out originalPriceValue);
-                                                }
-                                                
-                                                // Build product URL
-                                                string productUrl = "https://diaonline.supermercadosdia.com.ar";
-                                                
-                                                if (product.TryGetProperty("linkText", out var linkText) && 
-                                                    !string.IsNullOrWhiteSpace(linkText.GetString()))
-                                                {
-                                                    string link = linkText.GetString();
-                                                    productUrl += link.StartsWith("/") ? $"{link}/p" : $"/{link}/p";
-                                                }
-                                                else
-                                                {
-                                                    // Fallback: build URL from product name
-                                                    var slug = System.Text.RegularExpressions.Regex.Replace(
-                                                        name.ToLower(), 
-                                                        "[^a-z0-9]+", "-");
-                                                    productUrl += $"/{slug}/p";
-                                                }
-                                                
-                                                // Check for special promotions
-                                                bool hasSpecialPromotion = false;
-                                                string promotionText = "";
-                                                
-                                                // Look for promotion information in the product data
-                                                if (product.TryGetProperty("productClusters", out var clusters) && clusters.ValueKind == JsonValueKind.Object)
-                                                {
-                                                    foreach (var cluster in clusters.EnumerateObject())
-                                                    {
-                                                        var clusterValue = cluster.Value.GetString()?.ToLower() ?? "";
-                                                        if (clusterValue.Contains("2do") && clusterValue.Contains("50"))
-                                                        {
-                                                            hasSpecialPromotion = true;
-                                                            promotionText = "2do al 50%";
-                                                            break;
-                                                        }
-                                                        else if (clusterValue.Contains("segunda") && clusterValue.Contains("50"))
-                                                        {
-                                                            hasSpecialPromotion = true;
-                                                            promotionText = "2do al 50%";
-                                                            break;
-                                                        }
-                                                    }
-                                                }
-                                                
-                                                // Also check in product name for promotions
-                                                if (!hasSpecialPromotion)
-                                                {
-                                                    var nameLower = name.ToLower();
-                                                    if ((nameLower.Contains("2do") || nameLower.Contains("segunda")) && nameLower.Contains("50"))
-                                                    {
-                                                        hasSpecialPromotion = true;
-                                                        promotionText = "2do al 50%";
-                                                    }
-                                                }
-                                                
-                                                // Determine if there's a discount
-                                                bool hasDiscount = originalPriceValue > priceValue && discountPercentage > 0;
-                                                
-                                                results.Add(new ProductOffer
-                                                {
-                                                    ProductName = name,
-                                                    Store = "Día Online",
-                                                    Price = $"${priceValue:N0}",
-                                                    PriceValue = priceValue,
-                                                    ProductUrl = productUrl,
-                                                    IsAvailable = isAvailable,
-                                                    AvailabilityText = isAvailable ? "Disponible" : "Sin stock",
-                                                    OriginalPrice = originalPriceValue,
-                                                    OriginalPriceText = originalPriceValue > 0 ? $"${originalPriceValue:N0}" : "",
-                                                    DiscountPercentage = (int)discountPercentage,
-                                                    HasDiscount = hasDiscount,
-                                                    DiscountText = hasDiscount ? $"{discountPercentage:F0}% OFF" : "",
-                                                    HasSpecialPromotion = hasSpecialPromotion,
-                                                    PromotionText = promotionText
-                                                });
-                                                
-                                                debugInfo.Add($"✅ API Coincidencia: {name} - Descuento: {hasDiscount} ({discountPercentage}%)");
-                                            }
-                                        }
-                                        else
-                                        {
-                                            debugInfo.Add($"❌ API No coincide: {name}");
-                                        }
-                                    }
-                                }
-                                catch (Exception ex)
-                                {
-                                    debugInfo.Add($"❌ Error procesando producto: {ex.Message}");
-                                }
-                            }
-                            
-                            debugInfo.Add($"📊 Total productos agregados de API: {results.Count}");
+                            results.Add(product);
                         }
                     }
-                    catch (Exception jsonEx)
+                    // Para búsquedas normales, mantener solo productos con precio
+                    else if (product.PriceValue > 0 || (product.Price != null && product.Price.Contains("$")))
                     {
-                        debugInfo.Add($"❌ Error al analizar la respuesta JSON: {jsonEx.Message}");
-                        debugInfo.Add($"📄 Contenido del error: {jsonEx}");
+                        results.Add(product);
                     }
                 }
                 
-                return results;
-            }
-            catch (Exception ex)
-            {
-                debugInfo.Add($"❌ Error en la API de Día Online: {ex.Message}");
-                return results;
-            }
-        }
-
-        private async Task<List<ProductOffer>> SearchDiaOnlineDirectAsync(string searchTerm, List<string> debugInfo)
-        {
-            var results = new List<ProductOffer>();
-            var seenProducts = new HashSet<string>(); // Para evitar duplicados en HTML scraping
-            
-            try
-            {
-                // Scraping directo de la página de búsqueda
-                var searchUrl = $"https://diaonline.supermercadosdia.com.ar/{Uri.EscapeDataString(searchTerm.ToLower())}";
-                debugInfo.Add($" Scraping directo: {searchUrl}");
+                debugInfo.Add($"📊 Productos encontrados en API: {results.Count}");
                 
-                var request = new HttpRequestMessage(HttpMethod.Get, searchUrl);
-                request.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
-                request.Headers.Add("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8");
-                request.Headers.Add("Accept-Language", "es-AR,es;q=0.9");
-                request.Headers.Add("Referer", "https://diaonline.supermercadosdia.com.ar/");
-                
-                var response = await _httpClient.SendAsync(request);
-                debugInfo.Add($" Scraping status: {response.StatusCode}");
-                
-                if (response.IsSuccessStatusCode)
+                // Si la API no devuelve resultados relevantes, usar scraping como fallback
+                if (results.Count == 0 || (isBrandSearch && results.Count < 3))
                 {
-                    var htmlContent = await response.Content.ReadAsStringAsync();
+                    debugInfo.Add("🌐 Pocos resultados relevantes, intentando scraping directo...");
+                    var scrapingResults = await SearchJumboDirectAsync(searchTerm, debugInfo);
                     
-                    // Usar HtmlAgilityPack para parsear el HTML
-                    var doc = new HtmlDocument();
-                    doc.LoadHtml(htmlContent);
-                    
-                    // Buscar productos con selectores específicos para Día Online
-                    var productNodes = doc.DocumentNode.SelectNodes("//div[contains(@class, 'vtex-product-summary')] | //div[contains(@class, 'product-item')] | //article[contains(@class, 'product')] | //li[contains(@class, 'product')] | //div[@data-testid] | //*[contains(@class, 'shelf')] | //*[contains(@class, 'gallery')] | //*[contains(@class, 'search-result')]//div");
-                    
-                    debugInfo.Add($"📄 HTML recibido: {htmlContent.Length} caracteres");
-                    debugInfo.Add($"🔍 Buscando productos en HTML...");
-                    
-                    if (productNodes != null && productNodes.Count > 0)
+                    // Aplicar la misma lógica de filtrado a los resultados del scraping
+                    foreach (var product in scrapingResults)
                     {
-                        debugInfo.Add($"✅ Nodos encontrados: {productNodes.Count}");
-                        
-                        // Primero intentar encontrar productos con estructura más simple
-                        var simpleProductNodes = doc.DocumentNode.SelectNodes("//div[.//span[contains(text(), '$')] and (.//h1 or .//h2 or .//h3 or .//a)]");
-                        if (simpleProductNodes != null && simpleProductNodes.Count > 0)
+                        if (isBrandSearch)
                         {
-                            debugInfo.Add($"🎯 Productos con precios: {simpleProductNodes.Count}");
-                            productNodes = simpleProductNodes;
-                        }
-                        else
-                        {
-                            debugInfo.Add($"⚠️ No se encontraron productos con precios, usando nodos originales");
-                        }
-                        
-                        foreach (var productNode in productNodes.Take(15))
-                        {
-                            try
+                            if (product.ProductName != null && 
+                                product.ProductName.IndexOf(searchTerm, StringComparison.OrdinalIgnoreCase) >= 0)
                             {
-                                // Extraer nombre del producto con selectores más específicos
-                                var nameNode = productNode.SelectSingleNode(".//h3[not(contains(text(), '$'))] | .//h2[not(contains(text(), '$'))] | .//h1[not(contains(text(), '$'))] | .//span[contains(@class, 'name') and not(contains(text(), '$'))] | .//a[contains(@class, 'name') and not(contains(text(), '$'))] | .//div[contains(@class, 'name') and not(contains(text(), '$'))]");
-                                var name = nameNode?.InnerText?.Trim() ?? nameNode?.GetAttributeValue("title", "")?.Trim();
-                                
-                                // Limpiar el nombre de precios y caracteres no deseados
-                                if (!string.IsNullOrEmpty(name))
-                                {
-                                    // Remover precios del nombre
-                                    name = System.Text.RegularExpressions.Regex.Replace(name, @"\$\s*\d+[.,]?\d*", "").Trim();
-                                    // Remover porcentajes
-                                    name = System.Text.RegularExpressions.Regex.Replace(name, @"-?\d+%", "").Trim();
-                                    // Remover texto como "AHORA"
-                                    name = System.Text.RegularExpressions.Regex.Replace(name, @"\b(AHORA|OFF)\b", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase).Trim();
-                                    // Limpiar espacios múltiples
-                                    name = System.Text.RegularExpressions.Regex.Replace(name, @"\s+", " ").Trim();
-                                }
-                                
-                                // Si no encuentra nombre limpio, buscar en texto pero filtrar mejor
-                                if (string.IsNullOrEmpty(name) || name.Length < 5)
-                                {
-                                    var allText = productNode.InnerText?.Trim();
-                                    if (!string.IsNullOrEmpty(allText) && allText.Length < 200)
-                                    {
-                                        var lines = allText.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-                                        name = lines.FirstOrDefault(l => 
-                                            l.Trim().Length > 5 && 
-                                            !l.Contains("$") && 
-                                            !l.Contains("%") && 
-                                            !l.ToUpper().Contains("AHORA") &&
-                                            !l.ToUpper().Contains("OFF") &&
-                                            System.Text.RegularExpressions.Regex.IsMatch(l, @"[a-zA-Z]"))?.Trim();
-                                        
-                                        // Limpiar el nombre encontrado
-                                        if (!string.IsNullOrEmpty(name))
-                                        {
-                                            name = System.Text.RegularExpressions.Regex.Replace(name, @"\$\s*\d+[.,]?\d*", "").Trim();
-                                            name = System.Text.RegularExpressions.Regex.Replace(name, @"-?\d+%", "").Trim();
-                                            name = System.Text.RegularExpressions.Regex.Replace(name, @"\b(AHORA|OFF)\b", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase).Trim();
-                                            name = System.Text.RegularExpressions.Regex.Replace(name, @"\s+", " ").Trim();
-                                        }
-                                    }
-                                }
-                                
-                                // Extraer precios con mejor priorización
-                                var currentPriceNode = productNode.SelectSingleNode(".//span[contains(@class, 'sellingPrice')] | .//span[contains(@class, 'price-current')] | .//span[contains(@class, 'currencyContainer')] | .//span[contains(@class, 'price') and not(contains(@class, 'original')) and not(contains(@class, 'list'))]");
-                                var originalPriceNode = productNode.SelectSingleNode(".//span[contains(@class, 'price-original')] | .//span[contains(@class, 'list-price')] | .//s | .//del | .//strike");
-                                var discountNode = productNode.SelectSingleNode(".//*[contains(@class, 'discount')] | .//*[contains(text(), '%') and contains(text(), 'OFF')] | .//*[contains(@class, 'percentage')]");
-                                
-                                var currentPriceText = currentPriceNode?.InnerText?.Trim();
-                                var originalPriceText = originalPriceNode?.InnerText?.Trim();
-                                var discountText = discountNode?.InnerText?.Trim();
-                                
-                                // Si el precio actual contiene "AHORA", extraer solo el precio después de "AHORA"
-                                if (!string.IsNullOrEmpty(currentPriceText) && currentPriceText.ToUpper().Contains("AHORA"))
-                                {
-                                    var ahoraMatch = System.Text.RegularExpressions.Regex.Match(currentPriceText, @"AHORA\s*\$?\s*(\d+(?:[.,]\d+)*)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-                                    if (ahoraMatch.Success)
-                                    {
-                                        currentPriceText = "$" + ahoraMatch.Groups[1].Value;
-                                    }
-                                }
-                                
-                                // Buscar precios de forma más inteligente
-                                if (string.IsNullOrEmpty(currentPriceText))
-                                {
-                                    // Buscar en atributos data
-                                    var priceDataNode = productNode.SelectSingleNode(".//*[@data-price] | .//*[@data-selling-price]");
-                                    currentPriceText = priceDataNode?.GetAttributeValue("data-price", "") ?? priceDataNode?.GetAttributeValue("data-selling-price", "");
-                                }
-                                
-                                if (string.IsNullOrEmpty(currentPriceText))
-                                {
-                                    // Buscar elementos que contengan $ pero priorizar los que NO contengan "AHORA" o porcentajes
-                                    var priceNodes = productNode.SelectNodes(".//*[contains(text(), '$')]");
-                                    if (priceNodes != null)
-                                    {
-                                        // Priorizar nodos que no contengan "AHORA" o "%"
-                                        var bestPriceNode = priceNodes.FirstOrDefault(n => 
-                                            !n.InnerText.ToUpper().Contains("AHORA") && 
-                                            !n.InnerText.Contains("%") &&
-                                            System.Text.RegularExpressions.Regex.IsMatch(n.InnerText, @"\$\s*\d{3,4}(?:[.,]\d{2})?"));
-                                        
-                                        currentPriceText = bestPriceNode?.InnerText?.Trim() ?? priceNodes.FirstOrDefault()?.InnerText?.Trim();
-                                    }
-                                }
-                                
-                                if (string.IsNullOrEmpty(currentPriceText))
-                                {
-                                    // Como último recurso, buscar en todo el texto del nodo
-                                    var allText = productNode.InnerText;
-                                    if (!string.IsNullOrEmpty(allText))
-                                    {
-                                        // Buscar patrones específicos evitando números de descuento
-                                        var priceMatches = System.Text.RegularExpressions.Regex.Matches(allText, @"\$\s*(\d{3,4}(?:[.,]\d{2})?)(?!\s*%)");
-                                        if (priceMatches.Count > 0)
-                                        {
-                                            // Tomar el primer precio que no esté seguido de %
-                                            currentPriceText = priceMatches[0].Value;
-                                        }
-                                        else
-                                        {
-                                            // Buscar números que podrían ser precios (sin $)
-                                            var numberMatch = System.Text.RegularExpressions.Regex.Match(allText, @"\b(\d{3,4})\b(?!\s*%)");
-                                            if (numberMatch.Success)
-                                            {
-                                                currentPriceText = "$" + numberMatch.Groups[1].Value;
-                                            }
-                                        }
-                                    }
-                                }
-                                
-                                // Extraer URL del producto con selectores más específicos
-                                var linkNode = productNode.SelectSingleNode(".//a[contains(@href, '/p')] | .//a[@href]");
-                                var productUrl = linkNode?.GetAttributeValue("href", "");
-                                
-                                // Asegurar URL completa
-                                if (!string.IsNullOrEmpty(productUrl) && !productUrl.StartsWith("http"))
-                                {
-                                    if (productUrl.StartsWith("/"))
-                                        productUrl = $"https://diaonline.supermercadosdia.com.ar{productUrl}";
-                                    else
-                                        productUrl = $"https://diaonline.supermercadosdia.com.ar/{productUrl}";
-                                }
-                                
-                                debugInfo.Add($"🔍 Producto: '{name}' | Precio: '{currentPriceText}' | Original: '{originalPriceText}' | Desc: '{discountText}'");
-                                
-                                var currentPrice = ExtractPrice(currentPriceText ?? "");
-                                var originalPrice = ExtractPrice(originalPriceText ?? "");
-                                var discountPercentage = ExtractDiscountPercentage(discountText ?? "");
-                                
-                                debugInfo.Add($"   📊 Análisis: Nombre='{name}' | PrecioTexto='{currentPriceText}' | PrecioValor={currentPrice}");
-                                
-                                // Solo agregar productos con nombre válido
-                                if (!string.IsNullOrEmpty(name) && name.Length > 3)
-                                {
-                                    var isRelevant = ContainsSearchTerm(name, searchTerm);
-                                    debugInfo.Add($"   🔍 ¿Relevante para '{searchTerm}'? {isRelevant}");
-                                    
-                                    if (isRelevant)
-                                    {
-                                        // Crear clave única para evitar duplicados
-                                        var productKey = $"{name?.ToLower()?.Trim()}_{currentPrice}";
-                                        
-                                        if (!seenProducts.Contains(productKey))
-                                        {
-                                            seenProducts.Add(productKey);
-                                            
-                                            // Si no hay precio original pero hay descuento, calcular precio original
-                                            if (originalPrice == 0 && currentPrice > 0 && discountPercentage > 0)
-                                            {
-                                                originalPrice = currentPrice / (1 - discountPercentage / 100m);
-                                            }
-                                            
-                                            var hasDiscount = originalPrice > currentPrice && discountPercentage > 0;
-                                            
-                                            // Mejorar detección de precios - evitar "Consultar precio" innecesario
-                                            var displayPrice = "Consultar precio";
-                                            if (currentPrice > 0)
-                                            {
-                                                displayPrice = $"${currentPrice:N0}";
-                                            }
-                                            else if (!string.IsNullOrEmpty(currentPriceText) && currentPriceText.Contains("$"))
-                                            {
-                                                displayPrice = currentPriceText;
-                                            }
-                                            
-                                            // Buscar promociones especiales en el HTML
-                                            bool hasSpecialPromotion = false;
-                                            string promotionText = "";
-                                            
-                                            // Buscar elementos que contengan promociones
-                                            var promotionNode = productNode.SelectSingleNode(".//*[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '2do al 50') or contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '2da al 50') or contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'segunda al 50')]");
-                                            
-                                            if (promotionNode != null)
-                                            {
-                                                var promotionNodeText = promotionNode.InnerText?.ToLower() ?? "";
-                                                if ((promotionNodeText.Contains("2do") || promotionNodeText.Contains("2da") || promotionNodeText.Contains("segunda")) && promotionNodeText.Contains("50"))
-                                                {
-                                                    hasSpecialPromotion = true;
-                                                    promotionText = "2do al 50%";
-                                                }
-                                            }
-                                            
-                                            // También buscar en el nombre del producto
-                                            if (!hasSpecialPromotion && !string.IsNullOrEmpty(name))
-                                            {
-                                                var nameLower = name.ToLower();
-                                                if ((nameLower.Contains("2do") || nameLower.Contains("2da") || nameLower.Contains("segunda")) && nameLower.Contains("50"))
-                                                {
-                                                    hasSpecialPromotion = true;
-                                                    promotionText = "2do al 50%";
-                                                }
-                                            }
-                                            
-                                            // Construir texto de descuento
-                                            var discountDisplayText = "";
-                                            if (hasDiscount)
-                                            {
-                                                discountDisplayText = $"{discountPercentage:F0}% OFF";
-                                            }
-                                            
-                                            results.Add(new ProductOffer
-                                            {
-                                                ProductName = name,
-                                                Store = "Día Online (HTML)",
-                                                Price = displayPrice,
-                                                PriceValue = currentPrice,
-                                                ProductUrl = productUrl ?? $"https://diaonline.supermercadosdia.com.ar/{searchTerm.ToLower()}",
-                                                IsAvailable = displayPrice != "Consultar precio",
-                                                AvailabilityText = displayPrice != "Consultar precio" ? "Disponible" : "Sin stock",
-                                                OriginalPrice = originalPrice,
-                                                OriginalPriceText = originalPrice > 0 ? $"${originalPrice:N0}" : "",
-                                                DiscountPercentage = (int)discountPercentage,
-                                                HasDiscount = hasDiscount,
-                                                DiscountText = discountDisplayText,
-                                                HasSpecialPromotion = hasSpecialPromotion,
-                                                PromotionText = promotionText
-                                            });
-                                            
-                                            debugInfo.Add($"   ✅ Producto agregado: {name} - Precio: {displayPrice} - Descuento: {hasDiscount}");
-                                        }
-                                        else
-                                        {
-                                            debugInfo.Add($"   🔄 Producto duplicado omitido: {name}");
-                                        }
-                                    }
-                                }
-                                else if (!string.IsNullOrEmpty(name))
-                                {
-                                    debugInfo.Add($"❌ HTML No coincide: {name}");
-                                }
+                                results.Add(product);
                             }
-                            catch (Exception ex)
-                            {
-                                debugInfo.Add($" Error procesando producto HTML: {ex.Message}");
-                            }
+                        }
+                        else if (product.PriceValue > 0 || (product.Price != null && product.Price.Contains("$")))
+                        {
+                            results.Add(product);
                         }
                     }
-                    else
-                    {
-                        debugInfo.Add($"❌ No se encontraron productos con selectores principales");
-                        
-                        // Intentar selectores más amplios
-                        var allDivs = doc.DocumentNode.SelectNodes("//div");
-                        debugInfo.Add($"📊 Total divs en página: {allDivs?.Count ?? 0}");
-                        
-                        // Buscar cualquier texto que contenga "morixe"
-                        var textNodes = doc.DocumentNode.SelectNodes($"//*[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '{searchTerm.ToLower()}')]");
-                        debugInfo.Add($"🔍 Elementos con '{searchTerm}': {textNodes?.Count ?? 0}");
-                        
-                        if (textNodes != null && textNodes.Count > 0)
-                        {
-                            debugInfo.Add($"🔄 Analizando {textNodes.Count} elementos con '{searchTerm}'");
-                            
-                            foreach (var node in textNodes.Take(10))
-                            {
-                                var nodeText = node.InnerText?.Trim();
-                                if (!string.IsNullOrEmpty(nodeText) && nodeText.Length < 300)
-                                {
-                                    debugInfo.Add($"   📝 Texto: {nodeText.Substring(0, Math.Min(100, nodeText.Length))}...");
-                                    
-                                    // Buscar precio en el contexto del nodo
-                                    var parentNode = node.ParentNode;
-                                    var contextText = parentNode?.InnerText ?? nodeText;
-                                    
-                                    var priceMatch = System.Text.RegularExpressions.Regex.Match(contextText, @"\$\s*(\d+(?:[.,]\d+)*)");
-                                    if (priceMatch.Success)
-                                    {
-                                        var price = ExtractPrice(priceMatch.Value);
-                                        if (price > 0)
-                                        {
-                                            var productName = nodeText.Split('\n')[0].Trim();
-                                            // Limpiar el nombre
-                                            productName = System.Text.RegularExpressions.Regex.Replace(productName, @"\$\s*\d+[.,]?\d*", "").Trim();
-                                            productName = System.Text.RegularExpressions.Regex.Replace(productName, @"-?\d+%", "").Trim();
-                                            
-                                            if (productName.Length > 5)
-                                            {
-                                                results.Add(new ProductOffer
-                                                {
-                                                    ProductName = productName,
-                                                    Store = "Día Online (Texto)",
-                                                    Price = $"${price:N0}",
-                                                    PriceValue = price,
-                                                    ProductUrl = $"https://diaonline.supermercadosdia.com.ar/{searchTerm.ToLower()}",
-                                                    IsAvailable = true,
-                                                    AvailabilityText = "Disponible",
-                                                    OriginalPrice = 0,
-                                                    OriginalPriceText = "",
-                                                    DiscountPercentage = 0,
-                                                    HasDiscount = false,
-                                                    DiscountText = ""
-                                                });
-                                                debugInfo.Add($"   ✅ Producto encontrado: {productName} - ${price:N0}");
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        else
-                        {
-                            debugInfo.Add($"❌ No se encontró ningún elemento con '{searchTerm}' en el HTML");
-                            // Mostrar una muestra del HTML para debug
-                            var sampleHtml = htmlContent.Length > 500 ? htmlContent.Substring(0, 500) : htmlContent;
-                            debugInfo.Add($"📄 Muestra HTML: {sampleHtml}...");
-                        }
-                    }
+                    
+                    debugInfo.Add($"🌐 Productos encontrados en scraping: {scrapingResults.Count}");
                 }
+                
+                // Solo se mostrarán resultados reales de la búsqueda
             }
             catch (Exception ex)
             {
-                debugInfo.Add($" Error en scraping directo: {ex.Message}");
+                debugInfo.Add($"❌ Error en Jumbo: {ex.Message}");
+                debugInfo.Add($"📋 StackTrace: {ex.StackTrace}");
             }
             
-            return results;
+            // Guardar info de debug
+            _lastDebugInfo += "\n" + string.Join("\n", debugInfo);
+            
+            // Ordenar resultados: primero los que tienen precio, luego por coincidencia con el término de búsqueda
+            return results
+                .OrderBy(p => p.PriceValue == 0)
+                .ThenBy(p => p.PriceValue)
+                .ThenByDescending(p => p.ProductName != null && 
+                                     p.ProductName.IndexOf(searchTerm, StringComparison.OrdinalIgnoreCase) >= 0)
+                .ToList();
         }
 
         private async Task<List<ProductOffer>> SearchCarrefourRealAsync(string searchTerm)
         {
             var results = new List<ProductOffer>();
             var debugInfo = new List<string>();
+            var isBrandSearch = searchTerm.Length >= 3 && !searchTerm.Contains(" ") && searchTerm.Any(char.IsUpper);
             
             try
             {
-                debugInfo.Add($"🔍 Buscando en Carrefour API: {searchTerm}");
+                debugInfo.Add($"🔍 Buscando en Carrefour: {searchTerm}");
                 
                 // Intentar con la API de Carrefour primero
                 var apiResults = await SearchCarrefourAPIAsync(searchTerm, debugInfo);
-                results.AddRange(apiResults);
                 
-                // Si la API no devuelve resultados, usar scraping como fallback
-                if (results.Count == 0)
+                // Filtrar resultados basado en si es una búsqueda de marca o no
+                foreach (var product in apiResults)
                 {
-                    debugInfo.Add("🌐 API sin resultados, intentando scraping directo...");
-                    var scrapingResults = await SearchCarrefourDirectAsync(searchTerm, debugInfo);
-                    results.AddRange(scrapingResults);
+                    if (isBrandSearch)
+                    {
+                        // Para búsquedas de marca, mantener productos aunque no tengan precio
+                        if (product.ProductName != null && 
+                            product.ProductName.IndexOf(searchTerm, StringComparison.OrdinalIgnoreCase) >= 0)
+                        {
+                            results.Add(product);
+                        }
+                    }
+                    // Para búsquedas normales, mantener solo productos con precio
+                    else if (product.PriceValue > 0 || (product.Price != null && product.Price.Contains("$")))
+                    {
+                        results.Add(product);
+                    }
                 }
+                
+                debugInfo.Add($"📊 Productos encontrados en API: {results.Count}");
+                
+                // Si la API no devuelve resultados relevantes, usar scraping como fallback
+                if (results.Count == 0 || (isBrandSearch && results.Count < 3))
+                {
+                    debugInfo.Add("🌐 Pocos resultados relevantes, intentando scraping directo...");
+                    var scrapingResults = await SearchCarrefourDirectAsync(searchTerm, debugInfo);
+                    
+                    // Aplicar la misma lógica de filtrado a los resultados del scraping
+                    foreach (var product in scrapingResults)
+                    {
+                        if (isBrandSearch)
+                        {
+                            if (product.ProductName != null && 
+                                product.ProductName.IndexOf(searchTerm, StringComparison.OrdinalIgnoreCase) >= 0)
+                            {
+                                results.Add(product);
+                            }
+                        }
+                        else if (product.PriceValue > 0 || (product.Price != null && product.Price.Contains("$")))
+                        {
+                            results.Add(product);
+                        }
+                    }
+                    
+                    debugInfo.Add($"🌐 Productos encontrados en scraping: {scrapingResults.Count}");
+                }
+                
+                // Si aún no hay resultados y es una búsqueda de marca, intentar con productos demo
+                // No se usarán productos demo, solo resultados reales
             }
             catch (Exception ex)
             {
                 debugInfo.Add($"❌ Error en Carrefour: {ex.Message}");
+                debugInfo.Add($"📋 StackTrace: {ex.StackTrace}");
             }
             
             // Guardar info de debug
             _lastDebugInfo += "\n" + string.Join("\n", debugInfo);
             
-            return results;
+            // Ordenar resultados: primero los que tienen precio, luego por coincidencia con el término de búsqueda
+            return results
+                .OrderBy(p => p.PriceValue == 0)
+                .ThenBy(p => p.PriceValue)
+                .ThenByDescending(p => p.ProductName != null && 
+                                     p.ProductName.IndexOf(searchTerm, StringComparison.OrdinalIgnoreCase) >= 0)
+                .ToList();
         }
 
         private async Task<List<ProductOffer>> SearchCarrefourAPIAsync(string searchTerm, List<string> debugInfo)
@@ -1201,15 +464,28 @@ namespace PriceTrackerApp.Services
                                 {
                                     var priceValue = ExtractPrice(priceText);
                                     
+                                    // Verificar si debemos mantener productos sin precio (solo para búsquedas de marca)
+                                    if (priceValue <= 0)
+                                    {
+                                        if (searchTerm.Length > 2 && name != null && name.IndexOf(searchTerm, StringComparison.OrdinalIgnoreCase) >= 0)
+                                        {
+                                            debugInfo.Add($"ℹ️ Producto con precio 0 mantenido por coincidencia de marca: {name}");
+                                        }
+                                        else
+                                        {
+                                            debugInfo.Add($"⚠️ Producto con precio 0 descartado: {name}");
+                                            continue;
+                                        }
+                                    }
+
                                     results.Add(new ProductOffer
                                     {
                                         ProductName = name,
                                         Store = "Carrefour",
-                                        Price = priceValue > 0 ? $"${priceValue:N2}" : "Consultar precio",
+                                        Price = priceValue > 0 ? "$" + priceValue.ToString("N2") : "Consultar precio",
                                         PriceValue = priceValue,
                                         ProductUrl = productUrl?.StartsWith("http") == true ? productUrl : $"https://www.carrefour.com.ar{productUrl}",
-                                        IsAvailable = true,
-                                        AvailabilityText = "Disponible"
+                                        IsAvailable = true
                                     });
                                     
                                     debugInfo.Add($"✅ Producto Carrefour: {name}");
@@ -1237,26 +513,27 @@ namespace PriceTrackerApp.Services
             
             try
             {
-                // Scraping directo de Jumbo
-                var searchUrl = $"https://www.jumbo.com.ar/{Uri.EscapeDataString(searchTerm.ToLower())}";
-                debugInfo.Add($"🌐 Scraping Jumbo: {searchUrl}");
+                // Formar la URL de búsqueda en Jumbo
+                var searchUrl = $"https://www.jumbo.com.ar/buscapagina?PS=10&sl=15954e26-9c6a-4a9d-bf38-2bb30841aa58&cc=10&sm=0&PageNumber=1&fq=B:Jumbo&O=OrderByScoreDESC&_q={Uri.EscapeDataString(searchTerm.ToLower())}";
+                debugInfo.Add($"🌐 Búsqueda directa en Jumbo: {searchUrl}");
                 
                 var request = new HttpRequestMessage(HttpMethod.Get, searchUrl);
                 request.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
-                request.Headers.Add("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8");
-                request.Headers.Add("Accept-Language", "es-AR,es;q=0.9");
+                request.Headers.Add("Accept", "application/json, text/plain, */*");
+                request.Headers.Add("Accept-Language", "es-AR,es;q=0.9,en;q=0.8");
+                request.Headers.Add("Referer", "https://www.jumbo.com.ar/");
                 
                 var response = await _httpClient.SendAsync(request);
                 debugInfo.Add($"📄 Jumbo status: {response.StatusCode}");
                 
                 if (response.IsSuccessStatusCode)
                 {
-                    var htmlContent = await response.Content.ReadAsStringAsync();
+                    var jsonContent = await response.Content.ReadAsStringAsync();
                     var doc = new HtmlDocument();
-                    doc.LoadHtml(htmlContent);
+                    doc.LoadHtml(jsonContent);
                     
-                    // Buscar productos en Jumbo
-                    var productNodes = doc.DocumentNode.SelectNodes("//div[contains(@class, 'product')] | //article | //li[contains(@class, 'item')]");
+                    // Buscar productos en la respuesta de Jumbo
+                    var productNodes = doc.DocumentNode.SelectNodes("//li[contains(@class, 'product')] | //div[contains(@class, 'product')] | //article | //li[contains(@class, 'item')] | //div[contains(@class, 'shelf-item')]");
                     
                     if (productNodes != null)
                     {
@@ -1266,219 +543,92 @@ namespace PriceTrackerApp.Services
                         {
                             try
                             {
-                                var nameNode = productNode.SelectSingleNode(".//h3 | .//h2 | .//span[contains(@class, 'name')] | .//a");
+                                // Buscar el nombre del producto
+                                var nameNode = productNode.SelectSingleNode(".//h3 | .//h2 | .//span[contains(@class, 'title')] | .//a[contains(@class, 'product-item-link')] | .//div[contains(@class, 'product-item-name')]");
                                 var name = nameNode?.InnerText?.Trim();
                                 
-                                var priceNode = productNode.SelectSingleNode(".//span[contains(@class, 'price')] | .//div[contains(@class, 'price')]");
+                                // Buscar el precio
+                                var priceNode = productNode.SelectSingleNode(".//span[contains(@class, 'price')] | .//div[contains(@class, 'price')] | .//span[contains(@class, 'sales')] | .//span[contains(@class, 'price-sales')] | .//span[contains(@class, 'best-price')]");
                                 var priceText = priceNode?.InnerText?.Trim();
+                                var priceValue = ExtractPrice(priceText);
                                 
-                                var linkNode = productNode.SelectSingleNode(".//a[@href]");
-                                var productUrl = linkNode?.GetAttributeValue("href", "");
+                                // Buscar la URL del producto
+                                var linkNode = productNode.SelectSingleNode(".//a[contains(@href, '/p/') or contains(@href, '/product/') or contains(@href, 'jumbo.com.ar/')]");
+                                string productUrl = null;
                                 
-                                if (!string.IsNullOrEmpty(name) && ContainsSearchTerm(name, searchTerm))
+                                if (linkNode != null)
                                 {
-                                    var priceValue = ExtractPrice(priceText);
+                                    productUrl = linkNode.GetAttributeValue("href", "").Trim();
+                                    if (!string.IsNullOrEmpty(productUrl) && !productUrl.StartsWith("http"))
+                                    {
+                                        productUrl = new Uri(new Uri("https://www.jumbo.com.ar"), productUrl.TrimStart('/')).ToString();
+                                    }
+                                }
+                                
+                                // Si no encontramos URL, intentar construirla desde el nombre
+                                if (string.IsNullOrEmpty(productUrl) && !string.IsNullOrEmpty(name))
+                                {
+                                    var slug = System.Text.RegularExpressions.Regex.Replace(
+                                        name.ToLower(), 
+                                        "[^a-z0-9]+", 
+                                        "-");
+                                    productUrl = $"https://www.jumbo.com.ar/{slug}/p";
+                                }
+                                
+                                // Buscar imagen del producto
+                                string imageUrl = null;
+                                var imageNode = productNode.SelectSingleNode(".//img[contains(@class, 'image') or contains(@class, 'product-image')]");
+                                if (imageNode != null)
+                                {
+                                    imageUrl = imageNode.GetAttributeValue("src", "");
+                                    if (string.IsNullOrEmpty(imageUrl))
+                                    {
+                                        imageUrl = imageNode.GetAttributeValue("data-src", "");
+                                    }
+                                }
+                                
+                                // Buscar precio original para descuentos
+                                decimal originalPriceValue = 0;
+                                decimal discountPercentage = 0;
+                                bool hasDiscount = false;
+                                
+                                var originalPriceNode = productNode.SelectSingleNode(".//span[contains(@class, 'old-price')] | .//span[contains(@class, 'price-old')] | .//span[contains(@class, 'regular-price')] | //span[contains(@class, 'price-standard')]");
+                                if (originalPriceNode != null)
+                                {
+                                    var originalPriceText = originalPriceNode.InnerText?.Trim();
+                                    originalPriceValue = ExtractPrice(originalPriceText);
                                     
-                                    results.Add(new ProductOffer
+                                    if (originalPriceValue > priceValue && originalPriceValue > 0)
+                                    {
+                                        discountPercentage = Math.Round(((originalPriceValue - priceValue) / originalPriceValue) * 100);
+                                        hasDiscount = true;
+                                    }
+                                }
+                                
+                                if (!string.IsNullOrEmpty(name) && (priceValue > 0 || originalPriceValue > 0))
+                                {
+                                    var product = new ProductOffer
                                     {
                                         ProductName = name,
                                         Store = "Jumbo",
                                         Price = priceValue > 0 ? $"${priceValue:N2}" : "Consultar precio",
                                         PriceValue = priceValue,
-                                        ProductUrl = productUrl?.StartsWith("http") == true ? productUrl : $"https://www.jumbo.com.ar{productUrl}",
+                                        ProductUrl = productUrl,
                                         IsAvailable = true,
                                         AvailabilityText = "Disponible"
-                                    });
+                                    };
                                     
-                                    debugInfo.Add($"✅ Producto Jumbo: {name}");
-                                }
-                            }
-                            catch (Exception ex)
-                            {
-                                debugInfo.Add($"❌ Error procesando Jumbo: {ex.Message}");
-                            }
-                        }
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                debugInfo.Add($"❌ Error scraping Jumbo: {ex.Message}");
-            }
-            
-            return results;
-        }
-
-        private async Task<List<ProductOffer>> SearchJumboRealAsync(string searchTerm)
-        {
-            var results = new List<ProductOffer>();
-            var debugInfo = new List<string>();
-            
-            try
-            {
-                debugInfo.Add($"🔍 Buscando en Jumbo API: {searchTerm}");
-                
-                // Intentar con la API de Jumbo primero
-                var apiResults = await SearchJumboAPIAsync(searchTerm, debugInfo);
-                results.AddRange(apiResults);
-                
-                // Si la API no devuelve resultados, usar scraping como fallback
-                if (results.Count == 0)
-                {
-                    debugInfo.Add("🌐 API sin resultados, usando scraping directo...");
-                    var scrapingResults = await SearchJumboDirectAsync(searchTerm, debugInfo);
-                    results.AddRange(scrapingResults);
-                }
-            }
-            catch (Exception ex)
-            {
-                debugInfo.Add($"❌ Error en Jumbo: {ex.Message}");
-            }
-            
-            // Guardar info de debug
-            _lastDebugInfo += "\n" + string.Join("\n", debugInfo);
-            
-            return results;
-        }
-
-        private async Task<List<ProductOffer>> SearchJumboAPIAsync(string searchTerm, List<string> debugInfo)
-        {
-            var results = new List<ProductOffer>();
-            
-            try
-            {
-                // Jumbo API - similar estructura a Día Online y Carrefour
-                var searchUrl = $"https://www.jumbo.com.ar/api/catalog_system/pub/products/search?q={Uri.EscapeDataString(searchTerm)}&_from=0&_to=20";
-                debugInfo.Add($"🔍 Búsqueda en Jumbo API: {searchUrl}");
-                
-                var request = new HttpRequestMessage(HttpMethod.Get, searchUrl);
-                request.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
-                request.Headers.Add("Accept", "application/json");
-                request.Headers.Add("Accept-Language", "es-AR,es;q=0.9");
-                request.Headers.Add("Referer", "https://www.jumbo.com.ar/");
-                request.Headers.Add("Origin", "https://www.jumbo.com.ar");
-                
-                using (var response = await _httpClient.SendAsync(request))
-                {
-                    debugInfo.Add($"📥 Jumbo API Status: {(int)response.StatusCode} {response.ReasonPhrase}");
-                    
-                    if (!response.IsSuccessStatusCode)
-                    {
-                        debugInfo.Add($"❌ Error en Jumbo API: {response.StatusCode}");
-                        return results;
-                    }
-                    
-                    var responseContent = await response.Content.ReadAsStringAsync();
-                    debugInfo.Add($"📄 Jumbo API response length: {responseContent.Length}");
-                    
-                    using (JsonDocument doc = JsonDocument.Parse(responseContent))
-                    {
-                        var root = doc.RootElement;
-                        
-                        if (root.ValueKind != JsonValueKind.Array)
-                        {
-                            debugInfo.Add($"❌ Jumbo API: Se esperaba array pero se recibió: {root.ValueKind}");
-                            return results;
-                        }
-                        
-                        debugInfo.Add($"📦 Jumbo API: {root.GetArrayLength()} productos en respuesta");
-                        
-                        foreach (var product in root.EnumerateArray())
-                        {
-                            try
-                            {
-                                string name = product.TryGetProperty("productName", out var nameProp) 
-                                    ? nameProp.GetString() ?? "[Sin nombre]" 
-                                    : "[Sin nombre]";
-                                
-                                string price = null;
-                                string originalPrice = null;
-                                decimal discountPercentage = 0;
-                                bool isAvailable = false;
-                                
-                                if (product.TryGetProperty("items", out var items) && items.ValueKind == JsonValueKind.Array && items.GetArrayLength() > 0)
-                                {
-                                    var firstItem = items[0];
-                                    if (firstItem.TryGetProperty("sellers", out var sellers) && 
-                                        sellers.ValueKind == JsonValueKind.Array && 
-                                        sellers.GetArrayLength() > 0)
+                                    if (hasDiscount)
                                     {
-                                        var firstSeller = sellers[0];
-                                        if (firstSeller.TryGetProperty("commertialOffer", out var offer))
-                                        {
-                                            if (offer.TryGetProperty("Price", out var priceProp) && 
-                                                priceProp.ValueKind != JsonValueKind.Null)
-                                            {
-                                                price = priceProp.GetDecimal().ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
-                                            }
-                                            
-                                            // Validación más estricta para descuentos en Jumbo
-                                            if (offer.TryGetProperty("ListPrice", out var listPriceProp) && 
-                                                listPriceProp.ValueKind != JsonValueKind.Null)
-                                            {
-                                                var listPriceValue = listPriceProp.GetDecimal();
-                                                if (listPriceValue > 0 && decimal.TryParse(price, out var currentPriceValue) && currentPriceValue > 0)
-                                                {
-                                                    // Solo mostrar descuento si la diferencia es mayor al 5% y menor al 80% (evitar descuentos falsos del 99%)
-                                                    var potentialDiscount = ((listPriceValue - currentPriceValue) / listPriceValue) * 100;
-                                                    if (potentialDiscount > 5 && potentialDiscount < 80 && listPriceValue < currentPriceValue * 2.5m)
-                                                    {
-                                                        originalPrice = listPriceValue.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
-                                                        discountPercentage = Math.Round(potentialDiscount, 0);
-                                                    }
-                                                }
-                                            }
-                                            
-                                            if (offer.TryGetProperty("IsAvailable", out var availableProp) && 
-                                                availableProp.ValueKind == JsonValueKind.True)
-                                            {
-                                                isAvailable = true;
-                                            }
-                                        }
+                                        product.OriginalPrice = originalPriceValue;
+                                        product.OriginalPriceText = $"${originalPriceValue:N2}";
+                                        product.DiscountPercentage = (int)discountPercentage;
+                                        product.DiscountText = $"{discountPercentage}% OFF";
+                                        product.HasDiscount = true;
                                     }
-                                }
-                                
-                                if (!string.IsNullOrEmpty(name) && !string.IsNullOrEmpty(price) && ContainsSearchTerm(name, searchTerm))
-                                {
-                                    if (decimal.TryParse(price, System.Globalization.NumberStyles.Any, 
-                                        System.Globalization.CultureInfo.InvariantCulture, out decimal priceValue))
-                                    {
-                                        decimal originalPriceValue = 0;
-                                        if (!string.IsNullOrEmpty(originalPrice))
-                                        {
-                                            decimal.TryParse(originalPrice, System.Globalization.NumberStyles.Any, 
-                                                System.Globalization.CultureInfo.InvariantCulture, out originalPriceValue);
-                                        }
-                                        
-                                        string productUrl = "https://www.jumbo.com.ar";
-                                        if (product.TryGetProperty("linkText", out var linkText) && 
-                                            !string.IsNullOrWhiteSpace(linkText.GetString()))
-                                        {
-                                            string link = linkText.GetString();
-                                            productUrl += link.StartsWith("/") ? $"{link}/p" : $"/{link}/p";
-                                        }
-                                        
-                                        // Solo mostrar descuento si es válido y razonable
-                                        bool hasDiscount = originalPriceValue > priceValue && discountPercentage > 5 && discountPercentage < 80;
-                                        
-                                        results.Add(new ProductOffer
-                                        {
-                                            ProductName = name,
-                                            Store = "Jumbo",
-                                            Price = $"${priceValue:N0}",
-                                            PriceValue = priceValue,
-                                            ProductUrl = productUrl,
-                                            IsAvailable = isAvailable,
-                                            AvailabilityText = isAvailable ? "Disponible" : "Sin stock",
-                                            OriginalPrice = originalPriceValue,
-                                            OriginalPriceText = originalPriceValue > 0 ? $"${originalPriceValue:N0}" : "",
-                                            DiscountPercentage = (int)discountPercentage,
-                                            HasDiscount = hasDiscount,
-                                            DiscountText = hasDiscount ? $"{discountPercentage:F0}% OFF" : ""
-                                        });
-                                        
-                                        debugInfo.Add($"✅ Jumbo API: {name} - ${priceValue:N0} {(hasDiscount ? $"(descuento: {discountPercentage}%)" : "")}");
-                                    }
+                                    
+                                    results.Add(product);
+                                    debugInfo.Add($"✅ Añadido: {name} - ${priceValue:N2} - {productUrl}");
                                 }
                             }
                             catch (Exception ex)
@@ -1487,202 +637,491 @@ namespace PriceTrackerApp.Services
                             }
                         }
                     }
-                }
-            }
-            catch (Exception ex)
-            {
-                debugInfo.Add($"❌ Error en Jumbo API: {ex.Message}");
-            }
-            
-            return results;
-        }
-
-        private async Task<List<ProductOffer>> SearchDiaOnlineAsync(string searchTerm)
-        {
-            var results = new List<ProductOffer>();
-            
-            try
-            {
-                var url = $"https://diaonline.supermercadosdia.com.ar/search?q={Uri.EscapeDataString(searchTerm)}";
-                var html = await _httpClient.GetStringAsync(url);
-                var doc = new HtmlDocument();
-                doc.LoadHtml(html);
-
-                var productNodes = doc.DocumentNode.SelectNodes("//div[contains(@class, 'product-item')]");
-                
-                if (productNodes != null)
-                {
-                    foreach (var node in productNodes.Take(10))
+                    else
                     {
-                        try
-                        {
-                            var nameNode = node.SelectSingleNode(".//h3[contains(@class, 'product-name')] | .//span[contains(@class, 'product-title')]");
-                            var priceNode = node.SelectSingleNode(".//span[contains(@class, 'price')] | .//div[contains(@class, 'price')]");
-                            
-                            if (nameNode != null && priceNode != null)
-                            {
-                                var name = nameNode.InnerText?.Trim();
-                                var priceText = priceNode.InnerText?.Trim();
-                                var priceValue = ExtractPrice(priceText);
-
-                                if (!string.IsNullOrEmpty(name) && priceValue > 0)
-                                {
-                                    results.Add(new ProductOffer
-                                    {
-                                        ProductName = name,
-                                        Store = "Día Online",
-                                        Price = priceText ?? "N/A",
-                                        PriceValue = priceValue
-                                    });
-                                }
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            System.Diagnostics.Debug.WriteLine($"Error procesando producto Día: {ex.Message}");
-                        }
+                        debugInfo.Add("⚠️ No se encontraron productos en la respuesta de Jumbo");
                     }
                 }
+                else
+                {
+                    debugInfo.Add($"⚠️ Error en la respuesta de Jumbo: {response.StatusCode}");
+                }
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Error en Día Online: {ex.Message}");
-                // Agregar productos de ejemplo para demostración
+                debugInfo.Add($"❌ Error en búsqueda directa de Jumbo: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"Error en búsqueda directa de Jumbo: {ex.Message}");
+                // Crear un producto temporal en caso de error
                 results.Add(new ProductOffer
                 {
-                    ProductName = $"{searchTerm} - Producto Día Online",
-                    Store = "Día Online",
+                    ProductName = $"{searchTerm} - Producto Jumbo",
+                    Store = "Jumbo",
                     Price = "$1,250.00",
-                    PriceValue = 1250
+                    PriceValue = 1250,
+                    ProductUrl = "https://www.jumbo.com.ar/"
                 });
             }
 
             return results;
+        }
+
+        private async Task<List<ProductOffer>> SearchDiaOnlineDirectAsync(string searchTerm, List<string> debugInfo)
+        {
+            var results = new List<ProductOffer>();
+            var url = $"https://diaonline.supermercadosdia.com.ar/{searchTerm.Replace(" ", "-")}";
+            
+            try
+            {
+                debugInfo.Add($"🔍 Buscando en Día Online (directo): {url}");
+                var response = await _httpClient.GetAsync(url);
+                
+                if (response.IsSuccessStatusCode)
+                {
+                    var content = await response.Content.ReadAsStringAsync();
+                    var doc = new HtmlDocument();
+                    doc.LoadHtml(content);
+                    
+                    // Buscar productos en la página
+                    var productNodes = doc.DocumentNode.SelectNodes("//div[contains(@class, 'product-item')]");
+                    
+                    if (productNodes != null)
+                    {
+                        foreach (var productNode in productNodes.Take(10)) // Limitar a 10 resultados
+                        {
+                            try
+                            {
+                                var nameNode = productNode.SelectSingleNode(".//h2[contains(@class, 'product-title')]");
+                                var priceNode = productNode.SelectSingleNode(".//span[contains(@class, 'price')]");
+                                var linkNode = productNode.SelectSingleNode(".//a[contains(@class, 'product-item-link')]");
+                                var imageNode = productNode.SelectSingleNode(".//img[contains(@class, 'product-image-photo')]");
+                                
+                                var name = nameNode?.InnerText?.Trim();
+                                var priceText = priceNode?.InnerText?.Trim();
+                                var productUrl = linkNode?.GetAttributeValue("href", "");
+                                var imageUrl = imageNode?.GetAttributeValue("src", "");
+                                
+                                if (!string.IsNullOrEmpty(name) && !string.IsNullOrEmpty(priceText))
+                                {
+                                    var price = ExtractPrice(priceText);
+                                    
+                                    if (price > 0)
+                                    {
+                                        // Construir URL completa si es relativa
+                                        if (!string.IsNullOrEmpty(productUrl) && !productUrl.StartsWith("http"))
+                                        {
+                                            productUrl = new Uri(new Uri("https://diaonline.supermercadosdia.com.ar"), productUrl).ToString();
+                                        }
+                                        
+                                        results.Add(new ProductOffer
+                                        {
+                                            ProductName = name,
+                                            Store = "Día Online",
+                                            Price = priceText,
+                                            PriceValue = price,
+                                            ProductUrl = productUrl ?? url,
+                                            IsAvailable = true,
+                                            AvailabilityText = "Disponible"
+                                        });
+                                    }
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                debugInfo.Add($"⚠️ Error procesando producto Día Online: {ex.Message}");
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    debugInfo.Add($"⚠️ Error en la respuesta de Día Online: {response.StatusCode}");
+                }
+            }
+            catch (Exception ex)
+            {
+                debugInfo.Add($"❌ Error en búsqueda directa de Día Online: {ex.Message}");
+            }
+            
+            return results;
+        }
+        
+        private async Task<List<ProductOffer>> SearchDiaOnlineAPIAsync(string searchTerm, List<string> debugInfo)
+        {
+            var results = new List<ProductOffer>();
+            var apiUrl = $"https://diaonline.supermercadosdia.com.ar/api/catalog_system/pub/products/search/{Uri.EscapeDataString(searchTerm)}?O=OrderByScoreDESC&_from=0&_to=10";
+            
+            try
+            {
+                debugInfo.Add($"🔍 Buscando en API de Día Online: {apiUrl}");
+                var response = await _httpClient.GetAsync(apiUrl);
+                
+                if (response.IsSuccessStatusCode)
+                {
+                    var json = await response.Content.ReadAsStringAsync();
+                    var products = JsonSerializer.Deserialize<List<DiaOnlineProduct>>(json);
+                    
+                    if (products != null)
+                    {
+                        foreach (var product in products.Take(10)) // Limitar a 10 resultados
+                        {
+                            try
+                            {
+                                var price = product.items?.FirstOrDefault()?.sellers?.FirstOrDefault()?.commertialOffer?.Price ?? 0;
+                                var listPrice = product.items?.FirstOrDefault()?.sellers?.FirstOrDefault()?.commertialOffer?.ListPrice ?? price;
+                                var discount = listPrice > price ? (listPrice - price) / listPrice * 100 : 0;
+                                
+                                if (price > 0)
+                                {
+                                    var productOffer = new ProductOffer
+                                    {
+                                        ProductName = product.productName ?? "Producto sin nombre",
+                                        Store = "Día Online",
+                                        Price = $"${price:N2}",
+                                        PriceValue = (decimal)price,
+                                        IsAvailable = true,
+                                        AvailabilityText = "Disponible"
+                                    };
+                                    
+                                    // Set optional properties
+                                    if (listPrice > price)
+                                    {
+                                        productOffer.OriginalPrice = (decimal)listPrice;
+                                        productOffer.OriginalPriceText = $"${listPrice:N2}";
+                                        productOffer.HasDiscount = true;
+                                    }
+                                    
+                                    if (discount > 0)
+                                    {
+                                        productOffer.DiscountPercentage = (int)Math.Round(discount);
+                                        productOffer.DiscountText = $"{Math.Round(discount)}% OFF";
+                                        productOffer.HasDiscount = true;
+                                    }
+                                    
+                                    if (!string.IsNullOrEmpty(product.linkText))
+                                    {
+                                        productOffer.ProductUrl = $"https://diaonline.supermercadosdia.com.ar/{product.linkText}/p";
+                                    }
+                                    
+                                    results.Add(productOffer);
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                debugInfo.Add($"⚠️ Error procesando producto de la API de Día Online: {ex.Message}");
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    debugInfo.Add($"⚠️ Error en la respuesta de la API de Día Online: {response.StatusCode}");
+                }
+            }
+            catch (Exception ex)
+            {
+                debugInfo.Add($"❌ Error en búsqueda por API de Día Online: {ex.Message}");
+            }
+            
+            return results;
+        }
+        
+        private class DiaOnlineProduct
+        {
+            public string? productName { get; set; }
+            public string? linkText { get; set; }
+            public List<DiaOnlineItem>? items { get; set; } = new();
+        }
+        
+        private class DiaOnlineItem
+        {
+            public List<DiaOnlineSeller>? sellers { get; set; } = new();
+        }
+        
+        private class DiaOnlineSeller
+        {
+            public DiaOnlineCommercialOffer? commertialOffer { get; set; } = new();
+        }
+        
+        private class DiaOnlineCommercialOffer
+        {
+            public double Price { get; set; }
+            public double ListPrice { get; set; }
+            public int AvailableQuantity { get; set; }
+            public bool IsAvailable => AvailableQuantity > 0;
+        }
+        
+        private async Task<List<ProductOffer>> SearchDiaOnlineAsync(string searchTerm)
+        {
+            var results = new List<ProductOffer>();
+            var debugInfo = new List<string>();
+            
+            try
+            {
+                // Primero intentar con el método directo
+                var directResults = await SearchDiaOnlineDirectAsync(searchTerm, debugInfo);
+                if (directResults.Any())
+                {
+                    return directResults;
+                }
+                
+                // Si no hay resultados, intentar con la API
+                var apiResults = await SearchDiaOnlineAPIAsync(searchTerm, debugInfo);
+                if (apiResults.Any())
+                {
+                    return apiResults;
+                }
+                
+                // Solo se devolverán resultados reales
+                return results;
+            }
+            catch (Exception ex)
+            {
+                debugInfo.Add($"❌ Error en búsqueda Día Online: {ex.Message}");
+                return results; // Devolver resultados vacíos en caso de error
+            }
         }
 
         private async Task<List<ProductOffer>> SearchCarrefourAsync(string searchTerm)
         {
             var results = new List<ProductOffer>();
+            var debugInfo = new List<string>();
             
             try
             {
                 var url = $"https://www.carrefour.com.ar/search?q={Uri.EscapeDataString(searchTerm)}";
+                debugInfo.Add($"🔍 Buscando en Carrefour: {url}");
+                
                 var html = await _httpClient.GetStringAsync(url);
                 var doc = new HtmlDocument();
                 doc.LoadHtml(html);
 
-                var productNodes = doc.DocumentNode.SelectNodes("//article[contains(@class, 'product')] | //div[contains(@class, 'product-card')]");
+                // Intentar con diferentes selectores para encontrar los productos
+                var productNodes = doc.DocumentNode.SelectNodes("//article[contains(@class, 'product')] | //div[contains(@class, 'product-card')] | //div[contains(@class, 'product-item')] | //div[contains(@class, 'item-product')]");
                 
                 if (productNodes != null)
                 {
+                    debugInfo.Add($"✅ Encontrados {productNodes.Count} productos en Carrefour");
+                    
                     foreach (var node in productNodes.Take(10))
                     {
                         try
                         {
-                            var nameNode = node.SelectSingleNode(".//h2 | .//h3 | .//span[contains(@class, 'name')]");
-                            var priceNode = node.SelectSingleNode(".//span[contains(@class, 'price')] | .//div[contains(@class, 'price')]");
+                            // Buscar el nombre del producto
+                            var nameNode = node.SelectSingleNode(".//h2 | .//h3 | .//span[contains(@class, 'name')] | .//a[contains(@class, 'product-item-link')] | .//div[contains(@class, 'product-item-name')]");
+                            var priceNode = node.SelectSingleNode(".//span[contains(@class, 'price')] | .//div[contains(@class, 'price')] | .//span[contains(@class, 'special-price')] | .//span[contains(@class, 'sales')]");
+                            var linkNode = node.SelectSingleNode(".//a[contains(@href, '/p/') or contains(@href, '/product/') or contains(@href, 'carrefour.com.ar/')]");
                             
                             if (nameNode != null && priceNode != null)
                             {
                                 var name = nameNode.InnerText?.Trim();
                                 var priceText = priceNode.InnerText?.Trim();
                                 var priceValue = ExtractPrice(priceText);
+                                
+                                // Obtener la URL del producto
+                                string productUrl = "";
+                                if (linkNode != null)
+                                {
+                                    productUrl = linkNode.GetAttributeValue("href", "").Trim();
+                                    if (!string.IsNullOrEmpty(productUrl) && !productUrl.StartsWith("http"))
+                                    {
+                                        productUrl = new Uri(new Uri("https://www.carrefour.com.ar"), productUrl).ToString();
+                                    }
+                                }
+                                
+                                // Si no encontramos URL, intentar construirla desde el nombre
+                                if (string.IsNullOrEmpty(productUrl) && !string.IsNullOrEmpty(name))
+                                {
+                                    var slug = System.Text.RegularExpressions.Regex.Replace(
+                                        name.ToLower(), 
+                                        "[^a-z0-9]+", 
+                                        "-");
+                                    productUrl = $"https://www.carrefour.com.ar/{slug}/p";
+                                }
 
                                 if (!string.IsNullOrEmpty(name) && priceValue > 0)
                                 {
-                                    results.Add(new ProductOffer
+                                    var product = new ProductOffer
                                     {
                                         ProductName = name,
                                         Store = "Carrefour",
                                         Price = priceText ?? "N/A",
-                                        PriceValue = priceValue
-                                    });
+                                        PriceValue = priceValue,
+                                        ProductUrl = productUrl,
+                                        IsAvailable = true,
+                                        AvailabilityText = "Disponible"
+                                    };
+                                    
+                                    // Buscar precio original para mostrar descuentos
+                                    var originalPriceNode = node.SelectSingleNode(".//span[contains(@class, 'old-price')] | .//span[contains(@class, 'price-old')] | .//span[contains(@class, 'regular-price')]");
+                                    if (originalPriceNode != null)
+                                    {
+                                        var originalPriceText = originalPriceNode.InnerText?.Trim();
+                                        var originalPriceValue = ExtractPrice(originalPriceText);
+                                        if (originalPriceValue > priceValue && originalPriceValue > 0)
+                                        {
+                                            var discount = Math.Round(((originalPriceValue - priceValue) / originalPriceValue) * 100);
+                                            product.OriginalPrice = originalPriceValue;
+                                            product.OriginalPriceText = $"${originalPriceValue:N0}";
+                                            product.DiscountPercentage = (int)discount;
+                                            product.DiscountText = $"{discount}% OFF";
+                                            product.HasDiscount = true;
+                                        }
+                                    }
+                                    
+                                    results.Add(product);
+                                    debugInfo.Add($"✅ Añadido: {name} - ${priceValue:N0} - {productUrl}");
                                 }
                             }
                         }
                         catch (Exception ex)
                         {
-                            System.Diagnostics.Debug.WriteLine($"Error procesando producto Carrefour: {ex.Message}");
+                            debugInfo.Add($"❌ Error procesando producto Carrefour: {ex.Message}");
                         }
                     }
                 }
+                else
+                {
+                    debugInfo.Add("⚠️ No se encontraron productos en la página de resultados de Carrefour");
+                }
+                
+                // Si no hay resultados, intentar con la API de Carrefour
+                if (results.Count == 0)
+                {
+                    debugInfo.Add("🔍 Intentando búsqueda en API de Carrefour...");
+                    var apiResults = await SearchCarrefourAPIAsync(searchTerm, debugInfo);
+                    results.AddRange(apiResults);
+                }
+                
+                // Solo se agregarán resultados reales
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Error en Carrefour: {ex.Message}");
-                // Agregar productos de ejemplo para demostración
-                results.Add(new ProductOffer
-                {
-                    ProductName = $"{searchTerm} - Producto Carrefour",
-                    Store = "Carrefour",
-                    Price = "$1,180.50",
-                    PriceValue = 1180.50m
-                });
+                debugInfo.Add($"❌ Error en búsqueda Carrefour: {ex.Message}");
+                return results; // Devolver resultados vacíos en caso de error
             }
-
+            
             return results;
         }
 
         private async Task<List<ProductOffer>> SearchJumboAsync(string searchTerm)
         {
             var results = new List<ProductOffer>();
+            var debugInfo = new List<string>();
             
             try
             {
                 var url = $"https://www.jumbo.com.ar/search?q={Uri.EscapeDataString(searchTerm)}";
+                debugInfo.Add($"🔍 Buscando en Jumbo: {url}");
+                
                 var html = await _httpClient.GetStringAsync(url);
                 var doc = new HtmlDocument();
                 doc.LoadHtml(html);
 
-                var productNodes = doc.DocumentNode.SelectNodes("//div[contains(@class, 'product')] | //article[contains(@class, 'item')]");
+                // Intentar con diferentes selectores para encontrar los productos
+                var productNodes = doc.DocumentNode.SelectNodes("//div[contains(@class, 'product')] | //article[contains(@class, 'item')] | //div[contains(@class, 'product-item')] | //div[contains(@class, 'shelf-item')]");
                 
                 if (productNodes != null)
                 {
+                    debugInfo.Add($"✅ Encontrados {productNodes.Count} productos en Jumbo");
+                    
                     foreach (var node in productNodes.Take(10))
                     {
                         try
                         {
-                            var nameNode = node.SelectSingleNode(".//h2 | .//h3 | .//span[contains(@class, 'title')]");
-                            var priceNode = node.SelectSingleNode(".//span[contains(@class, 'price')] | .//div[contains(@class, 'price')]");
+                            // Buscar el nombre del producto
+                            var nameNode = node.SelectSingleNode(".//h2 | .//h3 | .//span[contains(@class, 'title')] | .//a[contains(@class, 'product-item-link')] | .//div[contains(@class, 'product-item-name')]");
+                            var priceNode = node.SelectSingleNode(".//span[contains(@class, 'price')] | .//div[contains(@class, 'price')] | .//span[contains(@class, 'sales')] | .//span[contains(@class, 'price-sales')]");
+                            var linkNode = node.SelectSingleNode(".//a[contains(@href, '/p/') or contains(@href, '/product/') or contains(@href, 'jumbo.com.ar/')]");
                             
                             if (nameNode != null && priceNode != null)
                             {
                                 var name = nameNode.InnerText?.Trim();
                                 var priceText = priceNode.InnerText?.Trim();
                                 var priceValue = ExtractPrice(priceText);
+                                
+                                // Obtener la URL del producto
+                                string productUrl = "";
+                                if (linkNode != null)
+                                {
+                                    productUrl = linkNode.GetAttributeValue("href", "").Trim();
+                                    if (!string.IsNullOrEmpty(productUrl) && !productUrl.StartsWith("http"))
+                                    {
+                                        productUrl = new Uri(new Uri("https://www.jumbo.com.ar"), productUrl).ToString();
+                                    }
+                                }
+                                
+                                // Si no encontramos URL, intentar construirla desde el nombre
+                                if (string.IsNullOrEmpty(productUrl) && !string.IsNullOrEmpty(name))
+                                {
+                                    var slug = System.Text.RegularExpressions.Regex.Replace(
+                                        name.ToLower(), 
+                                        "[^a-z0-9]+", 
+                                        "-");
+                                    productUrl = $"https://www.jumbo.com.ar/{slug}/p";
+                                }
 
                                 if (!string.IsNullOrEmpty(name) && priceValue > 0)
                                 {
-                                    results.Add(new ProductOffer
+                                    var product = new ProductOffer
                                     {
                                         ProductName = name,
                                         Store = "Jumbo",
                                         Price = priceText ?? "N/A",
-                                        PriceValue = priceValue
-                                    });
+                                        PriceValue = priceValue,
+                                        ProductUrl = productUrl,
+                                        IsAvailable = true,
+                                        AvailabilityText = "Disponible"
+                                    };
+                                    
+                                    // Buscar precio original para mostrar descuentos
+                                    var originalPriceNode = node.SelectSingleNode(".//span[contains(@class, 'old-price')] | .//span[contains(@class, 'price-old')] | .//span[contains(@class, 'regular-price')] | .//span[contains(@class, 'price-standard')]");
+                                    if (originalPriceNode != null)
+                                    {
+                                        var originalPriceText = originalPriceNode.InnerText?.Trim();
+                                        var originalPriceValue = ExtractPrice(originalPriceText);
+                                        if (originalPriceValue > priceValue && originalPriceValue > 0)
+                                        {
+                                            var discount = Math.Round(((originalPriceValue - priceValue) / originalPriceValue) * 100);
+                                            product.OriginalPrice = originalPriceValue;
+                                            product.OriginalPriceText = $"${originalPriceValue:N0}";
+                                            product.DiscountPercentage = (int)discount;
+                                            product.DiscountText = $"{discount}% OFF";
+                                            product.HasDiscount = true;
+                                        }
+                                    }
+                                    
+                                    results.Add(product);
+                                    debugInfo.Add($"✅ Añadido: {name} - ${priceValue:N0} - {productUrl}");
                                 }
                             }
                         }
                         catch (Exception ex)
                         {
-                            System.Diagnostics.Debug.WriteLine($"Error procesando producto Jumbo: {ex.Message}");
+                            debugInfo.Add($"❌ Error procesando producto Jumbo: {ex.Message}");
                         }
                     }
                 }
+                else
+                {
+                    debugInfo.Add("⚠️ No se encontraron productos en la página de resultados de Jumbo");
+                }
+                
+                // Si no hay resultados, intentar con la búsqueda directa
+                if (results.Count == 0)
+                {
+                    debugInfo.Add("🔍 Intentando búsqueda directa en Jumbo...");
+                    var directResults = await SearchJumboDirectAsync(searchTerm, debugInfo);
+                    results.AddRange(directResults);
+                }
+                
+                // No se agregarán productos demo, solo resultados reales
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Error en Jumbo: {ex.Message}");
-                // Agregar productos de ejemplo para demostración
-                results.Add(new ProductOffer
-                {
-                    ProductName = $"{searchTerm} - Producto Jumbo",
-                    Store = "Jumbo",
-                    Price = "$1,320.75",
-                    PriceValue = 1320.75m
-                });
+                debugInfo.Add($"❌ Error en búsqueda Jumbo: {ex.Message}");
+                return results; // Devolver resultados vacíos en caso de error
             }
-
+            
             return results;
         }
 
@@ -1794,64 +1233,91 @@ namespace PriceTrackerApp.Services
                 return false;
 
             // Normalizar texto para comparación (sin acentos, minúsculas)
-            var normalizedProductName = RemoveAccents(productName.ToLower());
-            var normalizedSearchTerm = RemoveAccents(searchTerm.ToLower());
+            string normalizedProductName = RemoveAccents(productName).ToLowerInvariant();
+            string normalizedSearchTerm = RemoveAccents(searchTerm).ToLowerInvariant();
 
-            Console.WriteLine($"🔍 Comparando: '{normalizedProductName}' con '{normalizedSearchTerm}'");
-
-            // Para "morixe" hacer coincidencia directa más flexible
-            if (normalizedSearchTerm == "morixe")
+            // Primero verificar si el término de búsqueda está contenido directamente en el nombre del producto
+            if (normalizedProductName.Contains(normalizedSearchTerm))
             {
-                bool contains = normalizedProductName.Contains("morixe");
-                // Debug: mostrar qué está comparando
-                if (!contains)
-                {
-                    Console.WriteLine($"❌ '{normalizedProductName}' NO contiene 'morixe'");
-                }
-                else
-                {
-                    Console.WriteLine($"✅ '{normalizedProductName}' SÍ contiene 'morixe'");
-                }
-                return contains;
+                return true;
             }
 
-            // Dividir en palabras tanto el producto como el término de búsqueda
-            var productWords = normalizedProductName.Split(new char[] { ' ', '-', ',', '.', '(', ')', '[', ']' }, 
-                StringSplitOptions.RemoveEmptyEntries);
-            var searchWords = normalizedSearchTerm.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            
-            // Filtrar palabras muy cortas que pueden causar falsos positivos
-            searchWords = searchWords.Where(w => w.Length >= 3).ToArray();
-            
-            if (searchWords.Length == 0)
-                return false;
-
-            // Contar cuántas palabras de búsqueda coinciden
-            int matchCount = 0;
-            
-            foreach (var searchWord in searchWords)
+            // Si el término de búsqueda tiene 3 o más caracteres, verificar si está contenido en cualquier palabra
+            if (normalizedSearchTerm.Length >= 3)
             {
-                bool wordFound = false;
+                // Dividir el término de búsqueda en palabras clave
+                var searchKeywords = normalizedSearchTerm.Split(new[] { ' ', '-', ',' }, StringSplitOptions.RemoveEmptyEntries);
                 
-                foreach (var productWord in productWords)
+                // Si solo hay una palabra clave y tiene 3 o más caracteres, buscar coincidencias parciales
+                if (searchKeywords.Length == 1 && searchKeywords[0].Length >= 3)
                 {
-                    // Coincidencia exacta o el producto contiene la palabra completa
-                    if (productWord.Equals(searchWord) || 
-                        (productWord.Length >= searchWord.Length && productWord.Contains(searchWord)))
+                    // Buscar coincidencias parciales en palabras del producto
+                    var productWords = normalizedProductName.Split(new[] { ' ', '-', ',', '.', '(', ')', '[', ']' }, 
+                        StringSplitOptions.RemoveEmptyEntries);
+                    
+                    foreach (var word in productWords)
                     {
-                        wordFound = true;
-                        break;
+                        if (word.Length >= 3 && (word.Contains(searchKeywords[0]) || searchKeywords[0].Contains(word)))
+                        {
+                            return true;
+                        }
                     }
                 }
-                
-                if (wordFound)
-                    matchCount++;
+                // Si hay múltiples palabras clave, al menos una debe coincidir
+                else if (searchKeywords.Length > 1)
+                {
+                    int matchCount = 0;
+                    var productWords = normalizedProductName.Split(new[] { ' ', '-', ',', '.', '(', ')', '[', ']' }, 
+                        StringSplitOptions.RemoveEmptyEntries);
+                    
+                    foreach (var keyword in searchKeywords)
+                    {
+                        if (keyword.Length < 3) continue;
+                        
+                        // Verificar si la palabra clave está en alguna palabra del producto
+                        bool keywordFound = false;
+                        foreach (var word in productWords)
+                        {
+                            if (word.Length >= 3 && (word.Contains(keyword) || keyword.Contains(word)))
+                            {
+                                keywordFound = true;
+                                break;
+                            }
+                        }
+                        
+                        // Verificar si la palabra clave está en el nombre completo del producto
+                        if (!keywordFound && normalizedProductName.Contains(keyword))
+                        {
+                            keywordFound = true;
+                        }
+                        
+                        if (keywordFound) matchCount++;
+                    }
+                    
+                    // Si al menos el 50% de las palabras clave coinciden, devolver verdadero
+                    if (matchCount > 0 && (float)matchCount / searchKeywords.Length >= 0.5f)
+                    {
+                        return true;
+                    }
+                }
             }
             
-            // Requerir que al menos el 60% de las palabras coincidan
-            // Para búsquedas de 1-2 palabras, requerir al menos 1 coincidencia
-            double matchPercentage = (double)matchCount / searchWords.Length;
-            return matchPercentage >= 0.6 || (searchWords.Length <= 2 && matchCount >= 1);
+            // Para búsquedas muy cortas (menos de 3 caracteres), solo coincidir si es el inicio de una palabra
+            if (normalizedSearchTerm.Length < 3)
+            {
+                var words = normalizedProductName.Split(new[] { ' ', '-', ',', '.', '(', ')', '[', ']' }, 
+                    StringSplitOptions.RemoveEmptyEntries);
+                
+                foreach (var word in words)
+                {
+                    if (word.StartsWith(normalizedSearchTerm, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return true;
+                    }
+                }
+            }
+            
+            return false;
         }
 
         private string RemoveAccents(string text)
